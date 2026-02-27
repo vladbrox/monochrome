@@ -767,9 +767,12 @@ export class UIRenderer {
         // Check if there are multiple discs in the tracks array
         const hasMultipleDiscs = tracks.some((t) => (t.volumeNumber || t.discNumber || 1) > 1);
 
-        tempDiv.innerHTML = tracks
-            .map((track, i) => this.createTrackItemHTML(track, i, showCover, hasMultipleDiscs, useTrackNumber))
-            .join('');
+        let html = '';
+        const len = tracks.length;
+        for (let i = 0; i < len; i++) {
+            html += this.createTrackItemHTML(tracks[i], i, showCover, hasMultipleDiscs, useTrackNumber);
+        }
+        tempDiv.innerHTML = html;
 
         // Bind data to elements immediately using index, avoiding selector ambiguity
         Array.from(tempDiv.children).forEach((element, index) => {

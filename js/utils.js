@@ -233,19 +233,30 @@ export const createQualityBadgeHTML = (track) => {
     return '';
 };
 
+/**
+ * Directly derives the best quality from a list of tags.
+ * Optimized to avoid intermediate array allocations.
+ */
 export const deriveQualityFromTags = (rawTags) => {
     if (!Array.isArray(rawTags)) return null;
 
-    const candidates = [];
+    let bestQuality = null;
+    let bestRank = Infinity;
+
     for (const tag of rawTags) {
         if (typeof tag !== 'string') continue;
         const normalized = normalizeQualityToken(tag);
-        if (normalized && !candidates.includes(normalized)) {
-            candidates.push(normalized);
+        if (normalized) {
+            const rank = QUALITY_RANK_MAP[normalized];
+            if (rank !== undefined && rank < bestRank) {
+                bestRank = rank;
+                bestQuality = normalized;
+                if (bestRank === 0) break;
+            }
         }
     }
 
-    return pickBestQuality(candidates);
+    return bestQuality;
 };
 
 /**
@@ -279,16 +290,34 @@ export const pickBestQuality = (candidates) => {
     return best;
 };
 
+/**
+ * Derives the track quality by checking metadata tags and quality tokens.
+ * Optimized to return early when optimal quality is found.
+ */
 export const deriveTrackQuality = (track) => {
     if (!track) return null;
 
-    const candidates = [
-        deriveQualityFromTags(track.mediaMetadata?.tags),
-        deriveQualityFromTags(track.album?.mediaMetadata?.tags),
-        normalizeQualityToken(track.audioQuality),
-    ];
+    let bestQuality = deriveQualityFromTags(track.mediaMetadata?.tags);
+    let bestRank = bestQuality ? QUALITY_RANK_MAP[bestQuality] : Infinity;
+    if (bestRank === 0) return bestQuality;
 
-    return pickBestQuality(candidates);
+    const albumQuality = deriveQualityFromTags(track.album?.mediaMetadata?.tags);
+    const albumRank = albumQuality ? QUALITY_RANK_MAP[albumQuality] : Infinity;
+
+    if (albumRank < bestRank) {
+        bestRank = albumRank;
+        bestQuality = albumQuality;
+        if (bestRank === 0) return bestQuality;
+    }
+
+    const audioQuality = normalizeQualityToken(track.audioQuality);
+    const audioRank = audioQuality ? QUALITY_RANK_MAP[audioQuality] : Infinity;
+
+    if (audioRank < bestRank) {
+        bestQuality = audioQuality;
+    }
+
+    return bestQuality;
 };
 
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -348,23 +377,32 @@ export const getTrackArtists = (track = {}, { fallback = 'Unknown Artist' } = {}
     return fallback;
 };
 
+/**
+ * Generates HTML for track artists.
+ * Optimized with a for loop to avoid array overhead during heavy rendering.
+ */
 export const getTrackArtistsHTML = (track = {}, { fallback = 'Unknown Artist' } = {}) => {
-    if (track?.artists?.length) {
-        return track.artists
-            .map((artist) => {
-                const escapedName = escapeHtml(artist.name || 'Unknown Artist');
+    const artists = track?.artists;
+    if (artists?.length) {
+        let html = '';
+        const isTracker = track.isTracker || (track.id && String(track.id).startsWith('tracker-'));
+        const len = artists.length;
+
+        for (let i = 0; i < len; i++) {
+            const artist = artists[i];
+            const escapedName = escapeHtml(artist.name || 'Unknown Artist');
+
+            if (isTracker && track.trackerInfo?.sheetId) {
+                const escapedSheetId = escapeHtml(track.trackerInfo.sheetId);
+                html += `<span class="artist-link tracker-artist-link" data-tracker-sheet-id="${escapedSheetId}">${escapedName}</span>`;
+            } else {
                 const escapedId = escapeHtml(artist.id || '');
-                // Check if this is a tracker/unreleased track
-                const isTracker = track.isTracker || (track.id && String(track.id).startsWith('tracker-'));
-                if (isTracker && track.trackerInfo?.sheetId) {
-                    const escapedSheetId = escapeHtml(track.trackerInfo.sheetId);
-                    // For tracker tracks, link to the tracker artist page
-                    return `<span class="artist-link tracker-artist-link" data-tracker-sheet-id="${escapedSheetId}">${escapedName}</span>`;
-                }
-                // For normal tracks, use the artist ID
-                return `<span class="artist-link" data-artist-id="${escapedId}">${escapedName}</span>`;
-            })
-            .join(', ');
+                html += `<span class="artist-link" data-artist-id="${escapedId}">${escapedName}</span>`;
+            }
+
+            if (i < len - 1) html += ', ';
+        }
+        return html;
     }
 
     return fallback;

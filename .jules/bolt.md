@@ -5,3 +5,7 @@
 ## 2025-05-14 - [High-Frequency String & Array Overhead]
 **Learning:** Using `Array.filter(Boolean).join(' ')` for class lists and `Array(n).fill(0).map(...).join('')` for skeleton rendering in tight loops creates unnecessary garbage and overhead. Standard string concatenation and simple `for` loops are significantly faster in Vanilla JS when generating large DOM fragments.
 **Action:** Prefer string concatenation and `for` loops over modern array methods in performance-critical rendering paths where hundreds of elements are generated.
+
+## 2025-05-14 - [Early Exit & Pre-computation for Metadata]
+**Learning:** Quality derivation and priority logic was previously processing all metadata before deciding the best quality. By using pre-computed rank maps and early exits (once HI_RES_LOSSLESS is found), we can skip significant amounts of processing.
+**Action:** Always implement early-exit logic when looking for a "best" result in a prioritized list, and use pre-computed maps to avoid repetitive array lookups.
