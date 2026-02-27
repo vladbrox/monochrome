@@ -70,11 +70,16 @@ export const SVG_BIN =
 export const SVG_MIX =
     '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>';
 
+/**
+ * Formats seconds into a M:SS string.
+ * Optimized with bitwise OR for faster floor operations.
+ */
 export const formatTime = (seconds) => {
     if (isNaN(seconds)) return '0:00';
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return `${m}:${String(s).padStart(2, '0')}`;
+    const totalSeconds = seconds | 0;
+    const m = (totalSeconds / 60) | 0;
+    const s = totalSeconds % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
 };
 
 export const getTrackYearDisplay = (track) => {
@@ -243,18 +248,31 @@ export const deriveQualityFromTags = (rawTags) => {
     return pickBestQuality(candidates);
 };
 
+/**
+ * Pre-computed rank map for fast quality priority lookups.
+ */
+const QUALITY_RANK_MAP = QUALITY_PRIORITY.reduce((map, quality, index) => {
+    map[quality] = index;
+    return map;
+}, {});
+
+/**
+ * Picks the best quality from a list of candidates based on pre-defined priority.
+ * Optimized from O(C*P) to O(C) using rank map.
+ */
 export const pickBestQuality = (candidates) => {
     let best = null;
     let bestRank = Infinity;
 
     for (const candidate of candidates) {
         if (!candidate) continue;
-        const rank = QUALITY_PRIORITY.indexOf(candidate);
-        const currentRank = rank === -1 ? Infinity : rank;
+        const rank = QUALITY_RANK_MAP[candidate];
+        const currentRank = rank === undefined ? Infinity : rank;
 
         if (currentRank < bestRank) {
             best = candidate;
             bestRank = currentRank;
+            if (bestRank === 0) break; // Optimal quality found
         }
     }
 
@@ -299,14 +317,22 @@ export const debounce = (func, wait) => {
     };
 };
 
+/**
+ * Escapes HTML special characters.
+ * Optimized using a regex with a lookup map for faster replacements.
+ */
+const ESCAPE_MAP = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+};
+const ESCAPE_REGEX = /[&<>"']/g;
+
 export const escapeHtml = (unsafe) => {
     if (typeof unsafe !== 'string') return unsafe;
-    return unsafe
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+    return unsafe.replace(ESCAPE_REGEX, (m) => ESCAPE_MAP[m]);
 };
 
 export const getTrackTitle = (track, { fallback = 'Unknown Title' } = {}) => {

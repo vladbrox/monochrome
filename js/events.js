@@ -1361,6 +1361,10 @@ export async function handleTrackAction(
             url = item.trackerInfo.sourceUrl;
         } else if (item.remoteUrl) {
             url = item.remoteUrl;
+        } else if (item.id && !String(item.id).startsWith('q:')) {
+            // Default to Tidal link for non-Qobuz tracks
+            const cleanId = String(item.id).replace('t:', '');
+            url = `https://tidal.com/track/${cleanId}`;
         }
 
         if (url) {
@@ -1446,11 +1450,12 @@ async function updateContextMenuLikeState(contextMenu, contextTrack) {
         trackMixItem.style.display = hasMix ? 'block' : 'none';
     }
 
-    // Show/hide "Open Original URL" only for unreleased/tracker tracks
+    // Show/hide "Open Original URL" for unreleased or Tidal tracks
     const openOriginalUrlItem = contextMenu.querySelector('li[data-action="open-original-url"]');
     if (openOriginalUrlItem) {
+        const isTidal = contextTrack.id && !String(contextTrack.id).startsWith('q:');
         const isUnreleased = contextTrack.isTracker || (contextTrack.trackerInfo && contextTrack.trackerInfo.sourceUrl);
-        openOriginalUrlItem.style.display = isUnreleased ? 'block' : 'none';
+        openOriginalUrlItem.style.display = isTidal || isUnreleased ? 'block' : 'none';
     }
 
     // Update block/unblock labels

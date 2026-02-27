@@ -371,14 +371,10 @@ export class UIRenderer {
             ? `title="Blocked: ${contentBlockingSettings.isTrackBlocked(track.id) ? 'Track blocked' : contentBlockingSettings.isArtistBlocked(track.artist?.id) ? 'Artist blocked' : 'Album blocked'}"`
             : '';
 
-        const classList = [
-            'track-item',
-            isCurrentTrack ? 'playing' : '',
-            isUnavailable ? 'unavailable' : '',
-            isBlocked ? 'blocked' : '',
-        ]
-            .filter(Boolean)
-            .join(' ');
+        let classList = 'track-item';
+        if (isCurrentTrack) classList += ' playing';
+        if (isUnavailable) classList += ' unavailable';
+        if (isBlocked) classList += ' blocked';
 
         return `
             <div class="${classList}" 
@@ -679,17 +675,19 @@ export class UIRenderer {
     }
 
     createSkeletonTracks(count = 5, showCover = false) {
-        return Array(count)
-            .fill(0)
-            .map(() => this.createSkeletonTrack(showCover))
-            .join('');
+        let html = '';
+        for (let i = 0; i < count; i++) {
+            html += this.createSkeletonTrack(showCover);
+        }
+        return html;
     }
 
     createSkeletonCards(count = 6, isArtist = false) {
-        return Array(count)
-            .fill(0)
-            .map(() => this.createSkeletonCard(isArtist))
-            .join('');
+        let html = '';
+        for (let i = 0; i < count; i++) {
+            html += this.createSkeletonCard(isArtist);
+        }
+        return html;
     }
 
     setupSearchClearButton(inputElement, clearBtnSelector = '.search-clear-btn') {
