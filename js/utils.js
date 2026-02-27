@@ -290,12 +290,18 @@ export const pickBestQuality = (candidates) => {
     return best;
 };
 
+const trackQualityCache = new WeakMap();
+
 /**
  * Derives the track quality by checking metadata tags and quality tokens.
- * Optimized to return early when optimal quality is found.
+ * Optimized with WeakMap memoization and early return logic.
  */
 export const deriveTrackQuality = (track) => {
     if (!track) return null;
+
+    if (trackQualityCache.has(track)) {
+        return trackQualityCache.get(track);
+    }
 
     let bestQuality = deriveQualityFromTags(track.mediaMetadata?.tags);
     let bestRank = bestQuality ? QUALITY_RANK_MAP[bestQuality] : Infinity;
@@ -317,6 +323,7 @@ export const deriveTrackQuality = (track) => {
         bestQuality = audioQuality;
     }
 
+    trackQualityCache.set(track, bestQuality);
     return bestQuality;
 };
 

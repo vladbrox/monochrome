@@ -18,6 +18,7 @@ import { initializePlayerEvents, initializeTrackInteractions, handleTrackAction 
 import { initializeUIInteractions } from './ui-interactions.js';
 import { debounce, SVG_PLAY, getShareUrl } from './utils.js';
 import { sidePanelManager } from './side-panel.js';
+import { escapeHtml } from './utils.js';
 import { db } from './db.js';
 import { syncManager } from './accounts/pocketbase.js';
 import { authManager } from './accounts/auth.js';
@@ -2546,12 +2547,6 @@ function showUpdateNotification(updateCallback) {
         trackDismissUpdate();
         notification.remove();
     });
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
 }
 
 function showMissingTracksNotification(missingTracks) {

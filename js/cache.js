@@ -33,9 +33,15 @@ export class APICache {
         });
     }
 
+    /**
+     * Generates a cache key.
+     * Optimized to avoid JSON.stringify for primitive parameters.
+     */
     generateKey(type, params) {
-        const paramString = typeof params === 'object' ? JSON.stringify(params) : String(params);
-        return `${type}:${paramString}`;
+        if (params === null || typeof params !== 'object') {
+            return `${type}:${params}`;
+        }
+        return `${type}:${JSON.stringify(params)}`;
     }
 
     async get(type, params) {
