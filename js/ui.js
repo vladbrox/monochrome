@@ -31,6 +31,7 @@ import {
     homePageSettings,
     fontSettings,
     contentBlockingSettings,
+    uiCoverArtSettings,
 } from './storage.js';
 import { db } from './db.js';
 import { getVibrantColorFromImage } from './vibrant-color.js';
@@ -129,6 +130,12 @@ export class UIRenderer {
         return SVG_HEART;
     }
 
+    _getUiCoverUrl(coverId, defaultSize = '640') {
+        if (!coverId) return '';
+        const size = uiCoverArtSettings.isEnabled() ? 'original' : defaultSize;
+        return this.api.getCoverUrl(coverId, size);
+    }
+
     async extractAndApplyColor(url) {
         if (!url) {
             this.resetVibrantColor();
@@ -178,8 +185,19 @@ export class UIRenderer {
         };
     }
 
-    async updateLikeState(element, type, id) {
-        const isLiked = await db.isFavorite(type, id);
+    _getEl(idOrSelector) {
+        return idOrSelector.startsWith('.') ||
+            idOrSelector.includes(' ') ||
+            idOrSelector.includes('[') ||
+            idOrSelector.includes('#')
+            ? document.querySelector(idOrSelector)
+            : document.getElementById(idOrSelector);
+    }
+
+    async updateLikeState(element, type, id, isLiked = null) {
+        if (isLiked === null) {
+            isLiked = await db.isFavorite(type, id);
+        }
         const btn = element.querySelector('.like-btn');
         if (btn) {
             btn.innerHTML = this.createHeartIcon(isLiked);
@@ -189,8 +207,8 @@ export class UIRenderer {
     }
 
     async renderPinnedItems() {
-        const nav = document.getElementById('pinned-items-nav');
-        const list = document.getElementById('pinned-items-list');
+        const nav = this._getEl('pinned-items-nav');
+        const list = this._getEl('pinned-items-list');
         if (!nav || !list) return;
 
         const pinnedItems = await db.getPinned();
@@ -207,14 +225,14 @@ export class UIRenderer {
                 if (item.type === 'user-playlist' && !item.cover && item.images && item.images.length > 0) {
                     const images = item.images.slice(0, 4);
                     const imgsHTML = images
-                        .map((src) => `<img src="${this.api.getCoverUrl(src)}" loading="lazy">`)
+                        .map((src) => `<img src="${this._getUiCoverUrl(src, '80')}" loading="lazy">`)
                         .join('');
                     iconHTML = `<div class="pinned-item-collage">${imgsHTML}</div>`;
                 } else {
                     const coverUrl =
                         item.type === 'artist'
                             ? this.api.getArtistPictureUrl(item.cover)
-                            : this.api.getCoverUrl(item.cover);
+                            : this._getUiCoverUrl(item.cover, '80');
                     const coverClass = item.type === 'artist' ? 'artist' : '';
                     iconHTML = `<img src="${coverUrl}" class="pinned-item-cover ${coverClass}" alt="${escapeHtml(item.name)}" loading="lazy" onerror="this.src='assets/logo.svg'">`;
                 }
@@ -235,12 +253,12 @@ export class UIRenderer {
         this.currentTrack = track;
         this.updateGlobalTheme();
 
-        const likeBtn = document.getElementById('now-playing-like-btn');
-        const addPlaylistBtn = document.getElementById('now-playing-add-playlist-btn');
-        const mobileAddPlaylistBtn = document.getElementById('mobile-add-playlist-btn');
-        const lyricsBtn = document.getElementById('toggle-lyrics-btn');
-        const fsLikeBtn = document.getElementById('fs-like-btn');
-        const fsAddPlaylistBtn = document.getElementById('fs-add-playlist-btn');
+        const likeBtn = this._getEl('now-playing-like-btn');
+        const addPlaylistBtn = this._getEl('now-playing-add-playlist-btn');
+        const mobileAddPlaylistBtn = this._getEl('mobile-add-playlist-btn');
+        const lyricsBtn = this._getEl('toggle-lyrics-btn');
+        const fsLikeBtn = this._getEl('fs-like-btn');
+        const fsAddPlaylistBtn = this._getEl('fs-add-playlist-btn');
 
         if (track) {
             const isLocal = track.isLocal;
@@ -301,7 +319,8 @@ export class UIRenderer {
 
     updateGlobalTheme() {
         // Check if we are currently viewing an album page
-        const isAlbumPage = document.getElementById('page-album').classList.contains('active');
+        const albumPage = this._getEl('page-album');
+        const isAlbumPage = albumPage && albumPage.classList.contains('active');
 
         if (isAlbumPage) {
             // The album page render logic handles its own coloring.
@@ -410,7 +429,7 @@ export class UIRenderer {
         if (videoUrl) {
             return `<video src="${videoUrl}" class="${className}" alt="${alt}" autoplay loop muted playsinline></video>`;
         }
-        return `<img src="${this.api.getCoverUrl(cover)}" class="${className}" alt="${alt}" loading="${loading}">`;
+        return `<img src="${this._getUiCoverUrl(cover)}" class="${className}" alt="${alt}" loading="${loading}">`;
     }
 
     createBaseCardHTML({
@@ -470,7 +489,7 @@ export class UIRenderer {
             href: `/playlist/${playlist.uuid}`,
             title: playlist.title,
             subtitle: `${playlist.numberOfTracks || 0} tracks`,
-            imageHTML: `<img src="${this.api.getCoverUrl(imageId)}" alt="${playlist.title}" class="card-image" loading="lazy">`,
+            imageHTML: `<img src="${this._getUiCoverUrl(imageId)}" alt="${playlist.title}" class="card-image" loading="lazy">`,
             actionButtonsHTML: `
                 <button class="like-btn card-like-btn" data-action="toggle-like" data-type="playlist" title="Add to Liked">
                     ${this.createHeartIcon(false)}
@@ -543,11 +562,11 @@ export class UIRenderer {
                 const covers = uniqueCovers.slice(0, 4);
                 imageHTML = `
                     <div class="card-image card-collage ${itemsClass}">
-                        ${covers.map((cover) => `<img src="${this.api.getCoverUrl(cover)}" alt="" loading="lazy">`).join('')}
+                        ${covers.map((cover) => `<img src="${this._getUiCoverUrl(cover, '160')}" alt="" loading="lazy">`).join('')}
                     </div>
                 `;
             } else if (uniqueCovers.length > 0) {
-                imageHTML = `<img src="${this.api.getCoverUrl(uniqueCovers[0])}" alt="${playlist.name}" class="card-image" loading="lazy">`;
+                imageHTML = `<img src="${this._getUiCoverUrl(uniqueCovers[0])}" alt="${playlist.name}" class="card-image" loading="lazy">`;
             } else {
                 imageHTML = `<img src="/assets/appicon.png" alt="${playlist.name}" class="card-image" loading="lazy">`;
             }
@@ -762,37 +781,41 @@ export class UIRenderer {
         searchInput.addEventListener('input', listener);
     }
 
-    renderListWithTracks(container, tracks, showCover, append = false, useTrackNumber = false) {
-        const fragment = document.createDocumentFragment();
-        const tempDiv = document.createElement('div');
-
+    async renderListWithTracks(container, tracks, showCover, append = false, useTrackNumber = false) {
         // Check if there are multiple discs in the tracks array
         const hasMultipleDiscs = tracks.some((t) => (t.volumeNumber || t.discNumber || 1) > 1);
 
-        tempDiv.innerHTML = tracks
+        // Optimization: Pre-fetch favorites to avoid multiple async calls during rendering
+        const favorites = await db.getFavorites('track');
+        const favoriteIds = new Set(favorites.map((t) => String(t.id)));
+
+        const tracksHTML = tracks
             .map((track, i) => this.createTrackItemHTML(track, i, showCover, hasMultipleDiscs, useTrackNumber))
             .join('');
 
-        // Bind data to elements immediately using index, avoiding selector ambiguity
-        Array.from(tempDiv.children).forEach((element, index) => {
-            const track = tracks[index];
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = tracksHTML;
+
+        const fragment = document.createDocumentFragment();
+        const elements = Array.from(tempDiv.children);
+
+        elements.forEach((element, i) => {
+            const track = tracks[i];
             if (element && track) {
                 trackDataStore.set(element, track);
-                // Async update for like button
-                this.updateLikeState(element, 'track', track.id);
+                const isLiked = favoriteIds.has(String(track.id));
+                this.updateLikeState(element, 'track', track.id, isLiked);
+                fragment.appendChild(element);
             }
         });
-
-        while (tempDiv.firstChild) {
-            fragment.appendChild(tempDiv.firstChild);
-        }
 
         if (!append) container.innerHTML = '';
         container.appendChild(fragment);
     }
 
     setPageBackground(imageUrl) {
-        const bgElement = document.getElementById('page-background');
+        const bgElement = this._getEl('page-background');
+        if (!bgElement) return;
         if (backgroundSettings.isEnabled() && imageUrl) {
             bgElement.style.backgroundImage = `url('${imageUrl}')`;
             bgElement.classList.add('active');
@@ -895,24 +918,24 @@ export class UIRenderer {
 
     updateFullscreenMetadata(track, nextTrack) {
         if (!track) return;
-        const overlay = document.getElementById('fullscreen-cover-overlay');
-        const image = document.getElementById('fullscreen-cover-image');
-        const title = document.getElementById('fullscreen-track-title');
-        const artist = document.getElementById('fullscreen-track-artist');
-        const nextTrackEl = document.getElementById('fullscreen-next-track');
+        const overlay = this._getEl('fullscreen-cover-overlay');
+        const image = this._getEl('fullscreen-cover-image');
+        const title = this._getEl('fullscreen-track-title');
+        const artist = this._getEl('fullscreen-track-artist');
+        const nextTrackEl = this._getEl('fullscreen-next-track');
 
         const videoCoverUrl = track.album?.videoCover
             ? this.api.tidalAPI.getVideoCoverUrl(track.album.videoCover, '1280')
             : null;
         const coverUrl = videoCoverUrl || this.api.getCoverUrl(track.album?.cover, '1280');
 
-        const fsLikeBtn = document.getElementById('fs-like-btn');
+        const fsLikeBtn = this._getEl('fs-like-btn');
         if (fsLikeBtn) {
             this.updateLikeState(fsLikeBtn.parentElement, 'track', track.id);
         }
 
         if (videoCoverUrl) {
-            if (image.tagName === 'IMG') {
+            if (image && image.tagName === 'IMG') {
                 const video = document.createElement('video');
                 video.src = videoCoverUrl;
                 video.autoplay = true;
@@ -933,8 +956,8 @@ export class UIRenderer {
             }
         }
 
-        const currentImage = document.getElementById('fullscreen-cover-image');
-        if (currentImage.src !== coverUrl || !videoCoverUrl) {
+        const currentImage = this._getEl('fullscreen-cover-image');
+        if (currentImage && (currentImage.src !== coverUrl || !videoCoverUrl)) {
             currentImage.src = coverUrl;
         }
         overlay.style.setProperty('--bg-image', `url('${coverUrl}')`);
@@ -957,9 +980,9 @@ export class UIRenderer {
         if (window.location.hash !== '#fullscreen') {
             window.history.pushState({ fullscreen: true }, '', '#fullscreen');
         }
-        const overlay = document.getElementById('fullscreen-cover-overlay');
-        const nextTrackEl = document.getElementById('fullscreen-next-track');
-        const lyricsToggleBtn = document.getElementById('toggle-fullscreen-lyrics-btn');
+        const overlay = this._getEl('fullscreen-cover-overlay');
+        const nextTrackEl = this._getEl('fullscreen-next-track');
+        const lyricsToggleBtn = this._getEl('toggle-fullscreen-lyrics-btn');
 
         this.updateFullscreenMetadata(track, nextTrack);
 
@@ -1001,7 +1024,7 @@ export class UIRenderer {
             }
 
             if (!this.visualizer && audioPlayer) {
-                const canvas = document.getElementById('visualizer-canvas');
+                const canvas = this._getEl('visualizer-canvas');
                 if (canvas) {
                     this.visualizer = new Visualizer(canvas, audioPlayer);
                 }
@@ -1014,12 +1037,12 @@ export class UIRenderer {
         if (localStorage.getItem('epilepsy-warning-dismissed') === 'true') {
             startVisualizer();
         } else {
-            const modal = document.getElementById('epilepsy-warning-modal');
+            const modal = this._getEl('epilepsy-warning-modal');
             if (modal) {
                 modal.classList.add('active');
 
-                const acceptBtn = document.getElementById('epilepsy-accept-btn');
-                const cancelBtn = document.getElementById('epilepsy-cancel-btn');
+                const acceptBtn = this._getEl('epilepsy-accept-btn');
+                const cancelBtn = this._getEl('epilepsy-cancel-btn');
 
                 acceptBtn.onclick = () => {
                     modal.classList.remove('active');
@@ -1037,10 +1060,10 @@ export class UIRenderer {
     }
 
     closeFullscreenCover() {
-        const overlay = document.getElementById('fullscreen-cover-overlay');
-        overlay.style.display = 'none';
+        const overlay = this._getEl('fullscreen-cover-overlay');
+        if (overlay) overlay.style.display = 'none';
 
-        const playerBar = document.querySelector('.now-playing-bar');
+        const playerBar = this._getEl('.now-playing-bar');
         if (playerBar) playerBar.style.removeProperty('display');
 
         if (this.fullscreenUpdateInterval) {
@@ -1054,21 +1077,21 @@ export class UIRenderer {
     }
 
     setupFullscreenControls(audioPlayer) {
-        const playBtn = document.getElementById('fs-play-pause-btn');
-        const prevBtn = document.getElementById('fs-prev-btn');
-        const nextBtn = document.getElementById('fs-next-btn');
-        const shuffleBtn = document.getElementById('fs-shuffle-btn');
-        const repeatBtn = document.getElementById('fs-repeat-btn');
-        const progressBar = document.getElementById('fs-progress-bar');
-        const progressFill = document.getElementById('fs-progress-fill');
-        const currentTimeEl = document.getElementById('fs-current-time');
-        const totalDurationEl = document.getElementById('fs-total-duration');
-        const fsLikeBtn = document.getElementById('fs-like-btn');
-        const fsAddPlaylistBtn = document.getElementById('fs-add-playlist-btn');
-        const fsDownloadBtn = document.getElementById('fs-download-btn');
-        const fsCastBtn = document.getElementById('fs-cast-btn');
-        const fsQueueBtn = document.getElementById('fs-queue-btn');
-        const artistEl = document.getElementById('fullscreen-track-artist');
+        const playBtn = this._getEl('fs-play-pause-btn');
+        const prevBtn = this._getEl('fs-prev-btn');
+        const nextBtn = this._getEl('fs-next-btn');
+        const shuffleBtn = this._getEl('fs-shuffle-btn');
+        const repeatBtn = this._getEl('fs-repeat-btn');
+        const progressBar = this._getEl('fs-progress-bar');
+        const progressFill = this._getEl('fs-progress-fill');
+        const currentTimeEl = this._getEl('fs-current-time');
+        const totalDurationEl = this._getEl('fs-total-duration');
+        const fsLikeBtn = this._getEl('fs-like-btn');
+        const fsAddPlaylistBtn = this._getEl('fs-add-playlist-btn');
+        const fsDownloadBtn = this._getEl('fs-download-btn');
+        const fsCastBtn = this._getEl('fs-cast-btn');
+        const fsQueueBtn = this._getEl('fs-queue-btn');
+        const artistEl = this._getEl('fullscreen-track-artist');
 
         if (artistEl) {
             artistEl.style.cursor = 'pointer';
@@ -1208,20 +1231,20 @@ export class UIRenderer {
         });
 
         if (fsLikeBtn) {
-            fsLikeBtn.onclick = () => document.getElementById('now-playing-like-btn')?.click();
+            fsLikeBtn.onclick = () => this._getEl('now-playing-like-btn')?.click();
         }
         if (fsAddPlaylistBtn) {
-            fsAddPlaylistBtn.onclick = () => document.getElementById('now-playing-add-playlist-btn')?.click();
+            fsAddPlaylistBtn.onclick = () => this._getEl('now-playing-add-playlist-btn')?.click();
         }
         if (fsDownloadBtn) {
-            fsDownloadBtn.onclick = () => document.getElementById('download-current-btn')?.click();
+            fsDownloadBtn.onclick = () => this._getEl('download-current-btn')?.click();
         }
         if (fsCastBtn) {
-            fsCastBtn.onclick = () => document.getElementById('cast-btn')?.click();
+            fsCastBtn.onclick = () => this._getEl('cast-btn')?.click();
         }
         if (fsQueueBtn) {
             fsQueueBtn.onclick = () => {
-                document.getElementById('queue-btn')?.click();
+                this._getEl('queue-btn')?.click();
             };
         }
 
@@ -1234,9 +1257,9 @@ export class UIRenderer {
         }
 
         // Fullscreen volume controls
-        const fsVolumeBtn = document.getElementById('fs-volume-btn');
-        const fsVolumeBar = document.getElementById('fs-volume-bar');
-        const fsVolumeFill = document.getElementById('fs-volume-fill');
+        const fsVolumeBtn = this._getEl('fs-volume-btn');
+        const fsVolumeBar = this._getEl('fs-volume-bar');
+        const fsVolumeFill = this._getEl('fs-volume-fill');
 
         if (fsVolumeBtn && fsVolumeBar && fsVolumeFill) {
             const updateFsVolumeUI = () => {
@@ -1315,7 +1338,8 @@ export class UIRenderer {
         }
 
         const update = () => {
-            if (document.getElementById('fullscreen-cover-overlay').style.display === 'none') return;
+            const fsOverlay = this._getEl('fullscreen-cover-overlay');
+            if (fsOverlay && fsOverlay.style.display === 'none') return;
 
             const duration = audioPlayer.duration || 0;
             const current = audioPlayer.currentTime || 0;
@@ -1366,21 +1390,21 @@ export class UIRenderer {
     async renderLibraryPage() {
         this.showPage('library');
 
-        const tracksContainer = document.getElementById('library-tracks-container');
-        const albumsContainer = document.getElementById('library-albums-container');
-        const artistsContainer = document.getElementById('library-artists-container');
-        const playlistsContainer = document.getElementById('library-playlists-container');
-        const localContainer = document.getElementById('library-local-container');
-        const foldersContainer = document.getElementById('my-folders-container');
+        const tracksContainer = this._getEl('library-tracks-container');
+        const albumsContainer = this._getEl('library-albums-container');
+        const artistsContainer = this._getEl('library-artists-container');
+        const playlistsContainer = this._getEl('library-playlists-container');
+        const localContainer = this._getEl('library-local-container');
+        const foldersContainer = this._getEl('my-folders-container');
 
         const likedTracks = await db.getFavorites('track');
-        const shuffleBtn = document.getElementById('shuffle-liked-tracks-btn');
-        const downloadBtn = document.getElementById('download-liked-tracks-btn');
+        const shuffleBtn = this._getEl('shuffle-liked-tracks-btn');
+        const downloadBtn = this._getEl('download-liked-tracks-btn');
 
         if (likedTracks.length) {
             if (shuffleBtn) shuffleBtn.style.display = 'flex';
             if (downloadBtn) downloadBtn.style.display = 'flex';
-            this.renderListWithTracks(tracksContainer, likedTracks, true);
+            await this.renderListWithTracks(tracksContainer, likedTracks, true);
         } else {
             if (shuffleBtn) shuffleBtn.style.display = 'none';
             if (downloadBtn) downloadBtn.style.display = 'none';
@@ -1389,28 +1413,36 @@ export class UIRenderer {
 
         const likedAlbums = await db.getFavorites('album');
         if (likedAlbums.length) {
-            albumsContainer.innerHTML = likedAlbums.map((a) => this.createAlbumCardHTML(a)).join('');
-            likedAlbums.forEach((album) => {
-                const el = albumsContainer.querySelector(`[data-album-id="${album.id}"]`);
-                if (el) {
-                    trackDataStore.set(el, album);
-                    this.updateLikeState(el, 'album', album.id);
-                }
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = likedAlbums.map((album) => this.createAlbumCardHTML(album)).join('');
+
+            const fragment = document.createDocumentFragment();
+            Array.from(tempDiv.children).forEach((el, i) => {
+                const album = likedAlbums[i];
+                trackDataStore.set(el, album);
+                this.updateLikeState(el, 'album', album.id);
+                fragment.appendChild(el);
             });
+            albumsContainer.innerHTML = '';
+            albumsContainer.appendChild(fragment);
         } else {
             albumsContainer.innerHTML = createPlaceholder('No liked albums yet.');
         }
 
         const likedArtists = await db.getFavorites('artist');
         if (likedArtists.length) {
-            artistsContainer.innerHTML = likedArtists.map((a) => this.createArtistCardHTML(a)).join('');
-            likedArtists.forEach((artist) => {
-                const el = artistsContainer.querySelector(`[data-artist-id="${artist.id}"]`);
-                if (el) {
-                    trackDataStore.set(el, artist);
-                    this.updateLikeState(el, 'artist', artist.id);
-                }
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = likedArtists.map((artist) => this.createArtistCardHTML(artist)).join('');
+
+            const fragment = document.createDocumentFragment();
+            Array.from(tempDiv.children).forEach((el, i) => {
+                const artist = likedArtists[i];
+                trackDataStore.set(el, artist);
+                this.updateLikeState(el, 'artist', artist.id);
+                fragment.appendChild(el);
             });
+            artistsContainer.innerHTML = '';
+            artistsContainer.appendChild(fragment);
         } else {
             artistsContainer.innerHTML = createPlaceholder('No liked artists yet.');
         }
@@ -1426,27 +1458,26 @@ export class UIRenderer {
         mixedContent.sort((a, b) => b.addedAt - a.addedAt);
 
         if (mixedContent.length) {
-            playlistsContainer.innerHTML = mixedContent
-                .map((item) => {
-                    return item._type === 'playlist' ? this.createPlaylistCardHTML(item) : this.createMixCardHTML(item);
-                })
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = mixedContent
+                .map((item) =>
+                    item._type === 'playlist' ? this.createPlaylistCardHTML(item) : this.createMixCardHTML(item)
+                )
                 .join('');
 
-            likedPlaylists.forEach((playlist) => {
-                const el = playlistsContainer.querySelector(`[data-playlist-id="${playlist.uuid}"]`);
-                if (el) {
-                    trackDataStore.set(el, playlist);
-                    this.updateLikeState(el, 'playlist', playlist.uuid);
+            const fragment = document.createDocumentFragment();
+            Array.from(tempDiv.children).forEach((el, i) => {
+                const item = mixedContent[i];
+                trackDataStore.set(el, item);
+                if (item._type === 'playlist') {
+                    this.updateLikeState(el, 'playlist', item.uuid);
+                } else {
+                    this.updateLikeState(el, 'mix', item.id);
                 }
+                fragment.appendChild(el);
             });
-
-            likedMixes.forEach((mix) => {
-                const el = playlistsContainer.querySelector(`[data-mix-id="${mix.id}"]`);
-                if (el) {
-                    trackDataStore.set(el, mix);
-                    this.updateLikeState(el, 'mix', mix.id);
-                }
-            });
+            playlistsContainer.innerHTML = '';
+            playlistsContainer.appendChild(fragment);
         } else {
             playlistsContainer.innerHTML = createPlaceholder('No liked playlists or mixes yet.');
         }
@@ -1470,13 +1501,17 @@ export class UIRenderer {
         const visiblePlaylists = myPlaylists.filter((p) => !playlistsInFolders.has(p.id));
 
         if (visiblePlaylists.length) {
-            myPlaylistsContainer.innerHTML = visiblePlaylists.map((p) => this.createUserPlaylistCardHTML(p)).join('');
-            visiblePlaylists.forEach((playlist) => {
-                const el = myPlaylistsContainer.querySelector(`[data-user-playlist-id="${playlist.id}"]`);
-                if (el) {
-                    trackDataStore.set(el, playlist);
-                }
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = visiblePlaylists.map((playlist) => this.createUserPlaylistCardHTML(playlist)).join('');
+
+            const fragment = document.createDocumentFragment();
+            Array.from(tempDiv.children).forEach((el, i) => {
+                const playlist = visiblePlaylists[i];
+                trackDataStore.set(el, playlist);
+                fragment.appendChild(el);
             });
+            myPlaylistsContainer.innerHTML = '';
+            myPlaylistsContainer.appendChild(fragment);
         } else {
             if (folders.length === 0) {
                 myPlaylistsContainer.innerHTML = createPlaceholder('No playlists yet. Create your first playlist!');
@@ -1492,10 +1527,10 @@ export class UIRenderer {
     async renderLocalFiles(container) {
         if (!container) return;
 
-        const introDiv = document.getElementById('local-files-intro');
-        const headerDiv = document.getElementById('local-files-header');
-        const listContainer = document.getElementById('local-files-list');
-        const selectBtnText = document.getElementById('select-local-folder-text');
+        const introDiv = this._getEl('local-files-intro');
+        const headerDiv = this._getEl('local-files-header');
+        const listContainer = this._getEl('local-files-list');
+        const selectBtnText = this._getEl('select-local-folder-text');
 
         const handle = await db.getSetting('local_folder_handle');
         if (handle) {
@@ -1508,7 +1543,7 @@ export class UIRenderer {
                     headerDiv.querySelector('h3').textContent = `Local Files (${window.localFilesCache.length})`;
                 }
                 if (listContainer) {
-                    this.renderListWithTracks(listContainer, window.localFilesCache, true);
+                    await this.renderListWithTracks(listContainer, window.localFilesCache, true);
                 }
             } else {
                 if (introDiv) introDiv.style.display = 'block';
@@ -1530,10 +1565,10 @@ export class UIRenderer {
         try {
             this.showPage('home');
 
-            const welcomeEl = document.getElementById('home-welcome');
-            const contentEl = document.getElementById('home-content');
-            const editorsPicksSectionEmpty = document.getElementById('home-editors-picks-section-empty');
-            const editorsPicksSection = document.getElementById('home-editors-picks-section');
+            const welcomeEl = this._getEl('home-welcome');
+            const contentEl = this._getEl('home-content');
+            const editorsPicksSectionEmpty = this._getEl('home-editors-picks-section-empty');
+            const editorsPicksSection = this._getEl('home-editors-picks-section');
 
             const history = await db.getHistory();
             const favorites = await db.getFavorites('track');
@@ -1568,10 +1603,10 @@ export class UIRenderer {
             if (welcomeEl) welcomeEl.style.display = 'none';
             if (contentEl) contentEl.style.display = 'block';
 
-            const refreshSongsBtn = document.getElementById('refresh-songs-btn');
-            const refreshAlbumsBtn = document.getElementById('refresh-albums-btn');
-            const refreshArtistsBtn = document.getElementById('refresh-artists-btn');
-            const clearRecentBtn = document.getElementById('clear-recent-btn');
+            const refreshSongsBtn = this._getEl('refresh-songs-btn');
+            const refreshAlbumsBtn = this._getEl('refresh-albums-btn');
+            const refreshArtistsBtn = this._getEl('refresh-artists-btn');
+            const clearRecentBtn = this._getEl('clear-recent-btn');
 
             if (refreshSongsBtn) refreshSongsBtn.onclick = () => this.renderHomeSongs(true);
             if (refreshAlbumsBtn) refreshAlbumsBtn.onclick = () => this.renderHomeAlbums(true);
@@ -1618,7 +1653,7 @@ export class UIRenderer {
     }
 
     async renderHomeSongs(forceRefresh = false, providedSeeds = null) {
-        const songsContainer = document.getElementById('home-recommended-songs');
+        const songsContainer = this._getEl('home-recommended-songs');
         const section = songsContainer?.closest('.content-section');
 
         if (!homePageSettings.shouldShowRecommendedSongs()) {
@@ -1645,7 +1680,7 @@ export class UIRenderer {
                 const filteredTracks = await this.filterUserContent(recommendedTracks, 'track');
 
                 if (filteredTracks.length > 0) {
-                    this.renderListWithTracks(songsContainer, filteredTracks, true);
+                    await this.renderListWithTracks(songsContainer, filteredTracks, true);
                 } else {
                     songsContainer.innerHTML = createPlaceholder('No song recommendations found.');
                 }
@@ -1657,7 +1692,7 @@ export class UIRenderer {
     }
 
     async renderHomeAlbums(forceRefresh = false, providedSeeds = null) {
-        const albumsContainer = document.getElementById('home-recommended-albums');
+        const albumsContainer = this._getEl('home-recommended-albums');
         const section = albumsContainer?.closest('.content-section');
 
         if (!homePageSettings.shouldShowRecommendedAlbums()) {
@@ -1682,17 +1717,19 @@ export class UIRenderer {
                     const filteredAlbums = await this.filterUserContent(similarAlbums, 'album');
 
                     if (filteredAlbums.length > 0) {
-                        albumsContainer.innerHTML = filteredAlbums
-                            .slice(0, 12)
-                            .map((a) => this.createAlbumCardHTML(a))
-                            .join('');
-                        filteredAlbums.slice(0, 12).forEach((a) => {
-                            const el = albumsContainer.querySelector(`[data-album-id="${a.id}"]`);
-                            if (el) {
-                                trackDataStore.set(el, a);
-                                this.updateLikeState(el, 'album', a.id);
-                            }
+                        const albumsToRender = filteredAlbums.slice(0, 12);
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = albumsToRender.map((a) => this.createAlbumCardHTML(a)).join('');
+
+                        const fragment = document.createDocumentFragment();
+                        Array.from(tempDiv.children).forEach((el, i) => {
+                            const a = albumsToRender[i];
+                            trackDataStore.set(el, a);
+                            this.updateLikeState(el, 'album', a.id);
+                            fragment.appendChild(el);
                         });
+                        albumsContainer.innerHTML = '';
+                        albumsContainer.appendChild(fragment);
                     } else {
                         albumsContainer.innerHTML = `<div style="grid-column: 1/-1; padding: 2rem 0;">${createPlaceholder('Tell us more about what you like so we can recommend albums!')}</div>`;
                     }
@@ -1728,7 +1765,7 @@ export class UIRenderer {
     }
 
     async renderHomeEditorsPicks(forceRefresh = false, containerId = 'home-editors-picks') {
-        const picksContainer = document.getElementById(containerId);
+        const picksContainer = this._getEl(containerId);
 
         if (picksContainer) {
             if (forceRefresh) picksContainer.innerHTML = this.createSkeletonCards(6);
@@ -1763,115 +1800,115 @@ export class UIRenderer {
                     items = [...items].sort(() => Math.random() - 0.5);
                 }
 
-                // Use cached metadata or fetch details for each item
-                const cardsHTML = [];
-                const itemsToStore = [];
-
-                for (const item of items) {
-                    try {
-                        if (item.type === 'album') {
-                            // Check if we have cached metadata
-                            if (item.title && item.artist) {
-                                // Use cached data directly
-                                const album = {
-                                    id: item.id,
-                                    title: item.title,
-                                    artist: item.artist,
-                                    releaseDate: item.releaseDate,
-                                    cover: item.cover,
-                                    explicit: item.explicit,
-                                    audioQuality: item.audioQuality,
-                                    mediaMetadata: item.mediaMetadata,
-                                    type: 'ALBUM',
-                                };
-                                cardsHTML.push(this.createAlbumCardHTML(album));
-                                itemsToStore.push({ el: null, data: album, type: 'album' });
-                            } else {
-                                // Fall back to API call for legacy format
-                                const result = await this.api.getAlbum(item.id);
-                                if (result && result.album) {
-                                    cardsHTML.push(this.createAlbumCardHTML(result.album));
-                                    itemsToStore.push({ el: null, data: result.album, type: 'album' });
+                // Use cached metadata or fetch details for each item in parallel
+                const itemsToStore = await Promise.all(
+                    items.map(async (item) => {
+                        try {
+                            if (item.type === 'album') {
+                                if (item.title && item.artist) {
+                                    const album = {
+                                        id: item.id,
+                                        title: item.title,
+                                        artist: item.artist,
+                                        releaseDate: item.releaseDate,
+                                        cover: item.cover,
+                                        explicit: item.explicit,
+                                        audioQuality: item.audioQuality,
+                                        mediaMetadata: item.mediaMetadata,
+                                        type: 'ALBUM',
+                                    };
+                                    return { data: album, type: 'album' };
+                                } else {
+                                    const result = await this.api.getAlbum(item.id);
+                                    if (result && result.album) {
+                                        return { data: result.album, type: 'album' };
+                                    }
+                                }
+                            } else if (item.type === 'artist') {
+                                if (item.name && item.picture) {
+                                    const artist = { id: item.id, name: item.name, picture: item.picture };
+                                    return { data: artist, type: 'artist' };
+                                } else {
+                                    const artist = await this.api.getArtist(item.id);
+                                    if (artist) return { data: artist, type: 'artist' };
+                                }
+                            } else if (item.type === 'track') {
+                                if (item.title && item.album) {
+                                    const track = {
+                                        id: item.id,
+                                        title: item.title,
+                                        artist: item.artist,
+                                        album: item.album,
+                                        explicit: item.explicit,
+                                        audioQuality: item.audioQuality,
+                                        mediaMetadata: item.mediaMetadata,
+                                        duration: item.duration,
+                                    };
+                                    return { data: track, type: 'track' };
+                                } else {
+                                    const track = await this.api.getTrackMetadata(item.id);
+                                    if (track) return { data: track, type: 'track' };
+                                }
+                            } else if (item.type === 'user-playlist') {
+                                if (item.id && item.name) {
+                                    const playlist = {
+                                        id: item.id,
+                                        name: item.name,
+                                        cover: item.cover,
+                                        tracks: item.tracks || [],
+                                        numberOfTracks: item.numberOfTracks || (item.tracks ? item.tracks.length : 0),
+                                        username: item.username,
+                                    };
+                                    return { data: playlist, type: 'user-playlist' };
+                                } else {
+                                    const playlist = await syncManager.getPublicPlaylist(item.id);
+                                    if (playlist) {
+                                        return {
+                                            data: { ...playlist, username: item.username },
+                                            type: 'user-playlist',
+                                        };
+                                    }
                                 }
                             }
-                        } else if (item.type === 'artist') {
-                            if (item.name && item.picture) {
-                                // Use cached data directly
-                                const artist = {
-                                    id: item.id,
-                                    name: item.name,
-                                    picture: item.picture,
-                                };
-                                cardsHTML.push(this.createArtistCardHTML(artist));
-                                itemsToStore.push({ el: null, data: artist, type: 'artist' });
-                            } else {
-                                // Fall back to API call
-                                const artist = await this.api.getArtist(item.id);
-                                if (artist) {
-                                    cardsHTML.push(this.createArtistCardHTML(artist));
-                                    itemsToStore.push({ el: null, data: artist, type: 'artist' });
-                                }
-                            }
-                        } else if (item.type === 'track') {
-                            if (item.title && item.album) {
-                                // Use cached data directly
-                                const track = {
-                                    id: item.id,
-                                    title: item.title,
-                                    artist: item.artist,
-                                    album: item.album,
-                                    explicit: item.explicit,
-                                    audioQuality: item.audioQuality,
-                                    mediaMetadata: item.mediaMetadata,
-                                    duration: item.duration,
-                                };
-                                cardsHTML.push(this.createTrackCardHTML(track));
-                                itemsToStore.push({ el: null, data: track, type: 'track' });
-                            } else {
-                                // Fall back to API call
-                                const track = await this.api.getTrackMetadata(item.id);
-                                if (track) {
-                                    cardsHTML.push(this.createTrackCardHTML(track));
-                                    itemsToStore.push({ el: null, data: track, type: 'track' });
-                                }
-                            }
-                        } else if (item.type === 'user-playlist') {
-                            if (item.id && item.name) {
-                                const playlist = {
-                                    id: item.id,
-                                    name: item.name,
-                                    cover: item.cover,
-                                    tracks: item.tracks || [],
-                                    numberOfTracks: item.numberOfTracks || (item.tracks ? item.tracks.length : 0),
-                                };
-                                const subtitle = item.username ? `by ${item.username}` : null;
-                                cardsHTML.push(this.createUserPlaylistCardHTML(playlist, subtitle));
-                                itemsToStore.push({ el: null, data: playlist, type: 'user-playlist' });
-                            } else {
-                                const playlist = await syncManager.getPublicPlaylist(item.id);
-                                if (playlist) {
-                                    const subtitle = item.username ? `by ${item.username}` : null;
-                                    cardsHTML.push(this.createUserPlaylistCardHTML(playlist, subtitle));
-                                    itemsToStore.push({ el: null, data: playlist, type: 'user-playlist' });
-                                }
-                            }
+                        } catch (e) {
+                            console.warn(`Failed to load ${item.type} ${item.id}:`, e);
                         }
-                    } catch (e) {
-                        console.warn(`Failed to load ${item.type} ${item.id}:`, e);
-                    }
-                }
+                        return null;
+                    })
+                );
 
-                if (cardsHTML.length > 0) {
-                    picksContainer.innerHTML = cardsHTML.join('');
-                    itemsToStore.forEach((item, _index) => {
+                const validItems = itemsToStore.filter(Boolean);
+
+                if (validItems.length > 0) {
+                    const itemsHTML = validItems
+                        .map((item) => {
+                            const type = item.type;
+                            const data = item.data;
+                            if (type === 'album') return this.createAlbumCardHTML(data);
+                            if (type === 'artist') return this.createArtistCardHTML(data);
+                            if (type === 'track') return this.createTrackCardHTML(data);
+                            if (type === 'user-playlist') {
+                                const subtitle = data.username ? `by ${data.username}` : null;
+                                return this.createUserPlaylistCardHTML(data, subtitle);
+                            }
+                            return '';
+                        })
+                        .join('');
+
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = itemsHTML;
+
+                    const fragment = document.createDocumentFragment();
+                    Array.from(tempDiv.children).forEach((el, i) => {
+                        const item = validItems[i];
+                        const data = item.data;
                         const type = item.type;
-                        const id = item.data.id;
-                        const el = picksContainer.querySelector(`[data-${type}-id="${id}"]`);
-                        if (el) {
-                            trackDataStore.set(el, item.data);
-                            this.updateLikeState(el, type, id);
-                        }
+                        trackDataStore.set(el, data);
+                        this.updateLikeState(el, type, data.id);
+                        fragment.appendChild(el);
                     });
+                    picksContainer.innerHTML = '';
+                    picksContainer.appendChild(fragment);
                 } else {
                     picksContainer.innerHTML = createPlaceholder("No editor's picks available.");
                 }
@@ -1883,7 +1920,7 @@ export class UIRenderer {
     }
 
     async renderHomeArtists(forceRefresh = false, providedSeeds = null) {
-        const artistsContainer = document.getElementById('home-recommended-artists');
+        const artistsContainer = this._getEl('home-recommended-artists');
         const section = artistsContainer?.closest('.content-section');
 
         if (!homePageSettings.shouldShowRecommendedArtists()) {
@@ -1910,17 +1947,19 @@ export class UIRenderer {
                     const filteredArtists = await this.filterUserContent(similarArtists, 'artist');
 
                     if (filteredArtists.length > 0) {
-                        artistsContainer.innerHTML = filteredArtists
-                            .slice(0, 12)
-                            .map((a) => this.createArtistCardHTML(a))
-                            .join('');
-                        filteredArtists.slice(0, 12).forEach((a) => {
-                            const el = artistsContainer.querySelector(`[data-artist-id="${a.id}"]`);
-                            if (el) {
-                                trackDataStore.set(el, a);
-                                this.updateLikeState(el, 'artist', a.id);
-                            }
+                        const artistsToRender = filteredArtists.slice(0, 12);
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = artistsToRender.map((a) => this.createArtistCardHTML(a)).join('');
+
+                        const fragment = document.createDocumentFragment();
+                        Array.from(tempDiv.children).forEach((el, i) => {
+                            const a = artistsToRender[i];
+                            trackDataStore.set(el, a);
+                            this.updateLikeState(el, 'artist', a.id);
+                            fragment.appendChild(el);
                         });
+                        artistsContainer.innerHTML = '';
+                        artistsContainer.appendChild(fragment);
                     } else {
                         artistsContainer.innerHTML = createPlaceholder('No artist recommendations found.');
                     }
@@ -1937,7 +1976,7 @@ export class UIRenderer {
     }
 
     renderHomeRecent() {
-        const recentContainer = document.getElementById('home-recent-mixed');
+        const recentContainer = this._getEl('home-recent-mixed');
         const section = recentContainer?.closest('.content-section');
 
         if (!homePageSettings.shouldShowJumpBackIn()) {
@@ -1960,7 +1999,7 @@ export class UIRenderer {
             const displayItems = items.slice(0, 6);
 
             if (displayItems.length > 0) {
-                recentContainer.innerHTML = displayItems
+                const itemsHTML = displayItems
                     .map((item) => {
                         if (item._kind === 'album') return this.createAlbumCardHTML(item);
                         if (item._kind === 'playlist') {
@@ -1972,24 +2011,21 @@ export class UIRenderer {
                     })
                     .join('');
 
-                displayItems.forEach((item) => {
-                    let selector = '';
-                    if (item._kind === 'album') selector = `[data-album-id="${item.id}"]`;
-                    else if (item._kind === 'playlist')
-                        selector = item.isUserPlaylist
-                            ? `[data-user-playlist-id="${item.id}"]`
-                            : `[data-playlist-id="${item.uuid}"]`;
-                    else if (item._kind === 'mix') selector = `[data-mix-id="${item.id}"]`;
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = itemsHTML;
 
-                    const el = recentContainer.querySelector(selector);
-                    if (el) {
-                        trackDataStore.set(el, item);
-                        if (item._kind === 'album') this.updateLikeState(el, 'album', item.id);
-                        if (item._kind === 'playlist' && !item.isUserPlaylist)
-                            this.updateLikeState(el, 'playlist', item.uuid);
-                        if (item._kind === 'mix') this.updateLikeState(el, 'mix', item.id);
-                    }
+                const fragment = document.createDocumentFragment();
+                Array.from(tempDiv.children).forEach((el, i) => {
+                    const item = displayItems[i];
+                    trackDataStore.set(el, item);
+                    if (item._kind === 'album') this.updateLikeState(el, 'album', item.id);
+                    else if (item._kind === 'playlist' && !item.isUserPlaylist)
+                        this.updateLikeState(el, 'playlist', item.uuid);
+                    else if (item._kind === 'mix') this.updateLikeState(el, 'mix', item.id);
+                    fragment.appendChild(el);
                 });
+                recentContainer.innerHTML = '';
+                recentContainer.appendChild(fragment);
             } else {
                 recentContainer.innerHTML = createPlaceholder('No recent items yet...');
             }
@@ -2055,12 +2091,13 @@ export class UIRenderer {
 
     async renderSearchPage(query) {
         this.showPage('search');
-        document.getElementById('search-results-title').textContent = `Search Results for "${query}"`;
+        const searchResultsTitle = this._getEl('search-results-title');
+        if (searchResultsTitle) searchResultsTitle.textContent = `Search Results for "${query}"`;
 
-        const tracksContainer = document.getElementById('search-tracks-container');
-        const artistsContainer = document.getElementById('search-artists-container');
-        const albumsContainer = document.getElementById('search-albums-container');
-        const playlistsContainer = document.getElementById('search-playlists-container');
+        const tracksContainer = this._getEl('search-tracks-container');
+        const artistsContainer = this._getEl('search-artists-container');
+        const albumsContainer = this._getEl('search-albums-container');
+        const playlistsContainer = this._getEl('search-playlists-container');
 
         tracksContainer.innerHTML = this.createSkeletonTracks(8, true);
         artistsContainer.innerHTML = this.createSkeletonCards(6, true);
@@ -2119,46 +2156,61 @@ export class UIRenderer {
             trackSearch(query, totalResults);
 
             if (finalTracks.length) {
-                this.renderListWithTracks(tracksContainer, finalTracks, true);
+                await this.renderListWithTracks(tracksContainer, finalTracks, true);
             } else {
                 tracksContainer.innerHTML = createPlaceholder('No tracks found.');
             }
 
-            artistsContainer.innerHTML = finalArtists.length
-                ? finalArtists.map((artist) => this.createArtistCardHTML(artist)).join('')
-                : createPlaceholder('No artists found.');
+            if (finalArtists.length) {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = finalArtists.map((artist) => this.createArtistCardHTML(artist)).join('');
 
-            finalArtists.forEach((artist) => {
-                const el = artistsContainer.querySelector(`[data-artist-id="${artist.id}"]`);
-                if (el) {
+                const fragment = document.createDocumentFragment();
+                Array.from(tempDiv.children).forEach((el, i) => {
+                    const artist = finalArtists[i];
                     trackDataStore.set(el, artist);
                     this.updateLikeState(el, 'artist', artist.id);
-                }
-            });
+                    fragment.appendChild(el);
+                });
+                artistsContainer.innerHTML = '';
+                artistsContainer.appendChild(fragment);
+            } else {
+                artistsContainer.innerHTML = createPlaceholder('No artists found.');
+            }
 
-            albumsContainer.innerHTML = finalAlbums.length
-                ? finalAlbums.map((album) => this.createAlbumCardHTML(album)).join('')
-                : createPlaceholder('No albums found.');
+            if (finalAlbums.length) {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = finalAlbums.map((album) => this.createAlbumCardHTML(album)).join('');
 
-            finalAlbums.forEach((album) => {
-                const el = albumsContainer.querySelector(`[data-album-id="${album.id}"]`);
-                if (el) {
+                const fragment = document.createDocumentFragment();
+                Array.from(tempDiv.children).forEach((el, i) => {
+                    const album = finalAlbums[i];
                     trackDataStore.set(el, album);
                     this.updateLikeState(el, 'album', album.id);
-                }
-            });
+                    fragment.appendChild(el);
+                });
+                albumsContainer.innerHTML = '';
+                albumsContainer.appendChild(fragment);
+            } else {
+                albumsContainer.innerHTML = createPlaceholder('No albums found.');
+            }
 
-            playlistsContainer.innerHTML = finalPlaylists.length
-                ? finalPlaylists.map((playlist) => this.createPlaylistCardHTML(playlist)).join('')
-                : createPlaceholder('No playlists found.');
+            if (finalPlaylists.length) {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = finalPlaylists.map((playlist) => this.createPlaylistCardHTML(playlist)).join('');
 
-            finalPlaylists.forEach((playlist) => {
-                const el = playlistsContainer.querySelector(`[data-playlist-id="${playlist.uuid}"]`);
-                if (el) {
+                const fragment = document.createDocumentFragment();
+                Array.from(tempDiv.children).forEach((el, i) => {
+                    const playlist = finalPlaylists[i];
                     trackDataStore.set(el, playlist);
                     this.updateLikeState(el, 'playlist', playlist.uuid);
-                }
-            });
+                    fragment.appendChild(el);
+                });
+                playlistsContainer.innerHTML = '';
+                playlistsContainer.appendChild(fragment);
+            } else {
+                playlistsContainer.innerHTML = createPlaceholder('No playlists found.');
+            }
         } catch (error) {
             if (error.name === 'AbortError') return;
             console.error('Search failed:', error);
@@ -2171,7 +2223,7 @@ export class UIRenderer {
     }
 
     renderSearchHistory() {
-        const historyEl = document.getElementById('search-history');
+        const historyEl = this._getEl('search-history');
         if (!historyEl) return;
         const history = JSON.parse(localStorage.getItem('search-history') || '[]');
         if (history.length === 0) {
@@ -2210,7 +2262,7 @@ export class UIRenderer {
                     return;
                 }
                 const query = item.dataset.query;
-                const searchInput = document.getElementById('search-input');
+                const searchInput = this._getEl('search-input');
                 if (searchInput) {
                     searchInput.value = query;
                     searchInput.dispatchEvent(new Event('input'));
@@ -2219,7 +2271,7 @@ export class UIRenderer {
             });
         });
 
-        const clearBtn = document.getElementById('clear-search-history');
+        const clearBtn = this._getEl('clear-search-history');
         if (clearBtn) {
             clearBtn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -2249,16 +2301,16 @@ export class UIRenderer {
     async renderAlbumPage(albumId, provider = null) {
         this.showPage('album');
 
-        const imageEl = document.getElementById('album-detail-image');
-        const titleEl = document.getElementById('album-detail-title');
-        const metaEl = document.getElementById('album-detail-meta');
-        const prodEl = document.getElementById('album-detail-producer');
-        const tracklistContainer = document.getElementById('album-detail-tracklist');
-        const playBtn = document.getElementById('play-album-btn');
+        const imageEl = this._getEl('album-detail-image');
+        const titleEl = this._getEl('album-detail-title');
+        const metaEl = this._getEl('album-detail-meta');
+        const prodEl = this._getEl('album-detail-producer');
+        const tracklistContainer = this._getEl('album-detail-tracklist');
+        const playBtn = this._getEl('play-album-btn');
         if (playBtn) playBtn.innerHTML = `${SVG_PLAY}<span>Play Album</span>`;
-        const dlBtn = document.getElementById('download-album-btn');
+        const dlBtn = this._getEl('download-album-btn');
         if (dlBtn) dlBtn.innerHTML = `${SVG_DOWNLOAD}<span>Download Album</span>`;
-        const mixBtn = document.getElementById('album-mix-btn');
+        const mixBtn = this._getEl('album-mix-btn');
         if (mixBtn) mixBtn.style.display = 'none';
 
         imageEl.src = '';
@@ -2280,7 +2332,7 @@ export class UIRenderer {
             const { album, tracks } = await this.api.getAlbum(albumId, provider);
 
             const videoCoverUrl = album.videoCover ? this.api.tidalAPI.getVideoCoverUrl(album.videoCover) : null;
-            const coverUrl = videoCoverUrl || this.api.getCoverUrl(album.cover);
+            const coverUrl = videoCoverUrl || this._getUiCoverUrl(album.cover, '1280');
 
             if (videoCoverUrl) {
                 if (imageEl.tagName === 'IMG') {
@@ -2359,12 +2411,12 @@ export class UIRenderer {
                 if (discA !== discB) return discA - discB;
                 return a.trackNumber - b.trackNumber;
             });
-            this.renderListWithTracks(tracklistContainer, tracks, false, true);
+            await this.renderListWithTracks(tracklistContainer, tracks, false, true);
 
             recentActivityManager.addAlbum(album);
 
             // Update header like button
-            const albumLikeBtn = document.getElementById('like-album-btn');
+            const albumLikeBtn = this._getEl('like-album-btn');
             if (albumLikeBtn) {
                 const isLiked = await db.isFavorite('album', album.id);
                 albumLikeBtn.innerHTML = this.createHeartIcon(isLiked);
@@ -2374,19 +2426,19 @@ export class UIRenderer {
             document.title = `${album.title} - ${album.artist.name}`;
 
             // "More from Artist" and Related Sections
-            const moreAlbumsSection = document.getElementById('album-section-more-albums');
-            const moreAlbumsContainer = document.getElementById('album-detail-more-albums');
-            const moreAlbumsTitle = document.getElementById('album-title-more-albums');
+            const moreAlbumsSection = this._getEl('album-section-more-albums');
+            const moreAlbumsContainer = this._getEl('album-detail-more-albums');
+            const moreAlbumsTitle = this._getEl('album-title-more-albums');
 
-            const epsSection = document.getElementById('album-section-eps');
-            const epsContainer = document.getElementById('album-detail-eps');
-            const epsTitle = document.getElementById('album-title-eps');
+            const epsSection = this._getEl('album-section-eps');
+            const epsContainer = this._getEl('album-detail-eps');
+            const epsTitle = this._getEl('album-title-eps');
 
-            const similarArtistsSection = document.getElementById('album-section-similar-artists');
-            const similarArtistsContainer = document.getElementById('album-detail-similar-artists');
+            const similarArtistsSection = this._getEl('album-section-similar-artists');
+            const similarArtistsContainer = this._getEl('album-detail-similar-artists');
 
-            const similarAlbumsSection = document.getElementById('album-section-similar-albums');
-            const similarAlbumsContainer = document.getElementById('album-detail-similar-albums');
+            const similarAlbumsSection = this._getEl('album-section-similar-albums');
+            const similarAlbumsContainer = this._getEl('album-detail-similar-albums');
 
             // Hide all initially
             [moreAlbumsSection, epsSection, similarArtistsSection, similarAlbumsSection].forEach((el) => {
@@ -2397,35 +2449,42 @@ export class UIRenderer {
                 const artistData = await this.api.getArtist(album.artist.id);
 
                 // Add Mix/Radio Button to header
-                const mixBtn = document.getElementById('album-mix-btn');
+                const mixBtn = this._getEl('album-mix-btn');
                 if (mixBtn && artistData.mixes && artistData.mixes.ARTIST_MIX) {
                     mixBtn.style.display = 'flex';
                     mixBtn.onclick = () => navigate(`/mix/${artistData.mixes.ARTIST_MIX}`);
                 }
 
-                const renderSection = (items, container, section, titleEl, titleText) => {
+                const renderSection = (items, container, section, titleEl, titleText, type = 'album') => {
                     if (!container || !section) return;
 
                     const filtered = (items || [])
                         .filter((a) => a.id != album.id)
                         .filter(
-                            (a, index, self) => index === self.findIndex((t) => t.title === a.title) // Dedup by title
+                            (a, index, self) => index === self.findIndex((t) => t.title === (t.title || t.name)) // Dedup by title
                         )
                         .slice(0, 12);
 
                     if (filtered.length === 0) return;
 
-                    container.innerHTML = filtered.map((a) => this.createAlbumCardHTML(a)).join('');
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = filtered
+                        .map((item) => (type === 'artist' ? this.createArtistCardHTML(item) : this.createAlbumCardHTML(item)))
+                        .join('');
+
+                    const fragment = document.createDocumentFragment();
+                    Array.from(tempDiv.children).forEach((el, i) => {
+                        const item = filtered[i];
+                        trackDataStore.set(el, item);
+                        this.updateLikeState(el, type, item.id);
+                        fragment.appendChild(el);
+                    });
+
+                    container.innerHTML = '';
+                    container.appendChild(fragment);
+
                     if (titleEl && titleText) titleEl.textContent = titleText;
                     section.style.display = 'block';
-
-                    filtered.forEach((a) => {
-                        const el = container.querySelector(`[data-album-id="${a.id}"]`);
-                        if (el) {
-                            trackDataStore.set(el, a);
-                            this.updateLikeState(el, 'album', a.id);
-                        }
-                    });
                 };
 
                 renderSection(
@@ -2447,24 +2506,9 @@ export class UIRenderer {
                 this.api
                     .getSimilarArtists(album.artist.id)
                     .then(async (similar) => {
-                        // Filter out blocked artists
                         const { contentBlockingSettings } = await import('./storage.js');
                         const filteredSimilar = contentBlockingSettings.filterArtists(similar || []);
-
-                        if (filteredSimilar.length > 0 && similarArtistsContainer && similarArtistsSection) {
-                            similarArtistsContainer.innerHTML = filteredSimilar
-                                .map((a) => this.createArtistCardHTML(a))
-                                .join('');
-                            similarArtistsSection.style.display = 'block';
-
-                            filteredSimilar.forEach((a) => {
-                                const el = similarArtistsContainer.querySelector(`[data-artist-id="${a.id}"]`);
-                                if (el) {
-                                    trackDataStore.set(el, a);
-                                    this.updateLikeState(el, 'artist', a.id);
-                                }
-                            });
-                        }
+                        renderSection(filteredSimilar, similarArtistsContainer, similarArtistsSection, null, null, 'artist');
                     })
                     .catch((e) => console.warn('Failed to load similar artists:', e));
 
@@ -2472,24 +2516,9 @@ export class UIRenderer {
                 this.api
                     .getSimilarAlbums(albumId)
                     .then(async (similar) => {
-                        // Filter out blocked albums
                         const { contentBlockingSettings } = await import('./storage.js');
                         const filteredSimilar = contentBlockingSettings.filterAlbums(similar || []);
-
-                        if (filteredSimilar.length > 0 && similarAlbumsContainer && similarAlbumsSection) {
-                            similarAlbumsContainer.innerHTML = filteredSimilar
-                                .map((a) => this.createAlbumCardHTML(a))
-                                .join('');
-                            similarAlbumsSection.style.display = 'block';
-
-                            filteredSimilar.forEach((a) => {
-                                const el = similarAlbumsContainer.querySelector(`[data-album-id="${a.id}"]`);
-                                if (el) {
-                                    trackDataStore.set(el, a);
-                                    this.updateLikeState(el, 'album', a.id);
-                                }
-                            });
-                        }
+                        renderSection(filteredSimilar, similarAlbumsContainer, similarAlbumsSection, null, null, 'album');
                     })
                     .catch((e) => console.warn('Failed to load similar albums:', e));
             } catch (err) {
@@ -2502,8 +2531,8 @@ export class UIRenderer {
     }
 
     async loadRecommendedSongsForPlaylist(tracks, forceRefresh = false) {
-        const recommendedSection = document.getElementById('playlist-section-recommended');
-        const recommendedContainer = document.getElementById('playlist-detail-recommended');
+        const recommendedSection = this._getEl('playlist-section-recommended');
+        const recommendedContainer = this._getEl('playlist-detail-recommended');
 
         if (!recommendedSection || !recommendedContainer) {
             console.warn('Recommended songs section not found in DOM');
@@ -2524,7 +2553,7 @@ export class UIRenderer {
             recommendedTracks = contentBlockingSettings.filterTracks(recommendedTracks);
 
             if (recommendedTracks.length > 0) {
-                this.renderListWithTracks(recommendedContainer, recommendedTracks, true);
+                await this.renderListWithTracks(recommendedContainer, recommendedTracks, true);
 
                 const trackItems = recommendedContainer.querySelectorAll('.track-item');
                 trackItems.forEach((item) => {
@@ -2548,7 +2577,7 @@ export class UIRenderer {
                                         const updatedPlaylist = await db.getPlaylist(playlistId);
                                         syncManager.syncUserPlaylist(updatedPlaylist, 'update');
 
-                                        const tracklistContainer = document.getElementById('playlist-detail-tracklist');
+                                        const tracklistContainer = this._getEl('playlist-detail-tracklist');
                                         if (tracklistContainer && updatedPlaylist.tracks) {
                                             tracklistContainer.innerHTML = `
                                                                                                                                                 <div class="track-list-header">
@@ -2557,7 +2586,7 @@ export class UIRenderer {
                                                                                                                                                     <span class="duration-header">Duration</span>
                                                                                                                                                     <span style="display: flex; justify-content: flex-end; opacity: 0.8;">Menu</span>
                                                                                                                                                 </div>                                            `;
-                                            this.renderListWithTracks(tracklistContainer, updatedPlaylist.tracks, true);
+                                            await this.renderListWithTracks(tracklistContainer, updatedPlaylist.tracks, true);
 
                                             if (document.querySelector('.remove-from-playlist-btn')) {
                                                 this.enableTrackReordering(
@@ -2569,7 +2598,7 @@ export class UIRenderer {
                                             }
 
                                             // Update the playlist metadata
-                                            const metaEl = document.getElementById('playlist-detail-meta');
+                                            const metaEl = this._getEl('playlist-detail-meta');
                                             if (metaEl) {
                                                 const totalDuration = calculateTotalDuration(updatedPlaylist.tracks);
                                                 metaEl.textContent = `${updatedPlaylist.tracks.length} tracks • ${formatDuration(totalDuration)}`;
@@ -2608,20 +2637,20 @@ export class UIRenderer {
         this.showPage('playlist');
 
         // Reset search input for new playlist
-        const searchInput = document.getElementById('track-list-search-input');
+        const searchInput = this._getEl('track-list-search-input');
         if (searchInput) searchInput.value = '';
 
-        const imageEl = document.getElementById('playlist-detail-image');
-        const collageEl = document.getElementById('playlist-detail-collage');
-        const titleEl = document.getElementById('playlist-detail-title');
-        const metaEl = document.getElementById('playlist-detail-meta');
-        const descEl = document.getElementById('playlist-detail-description');
-        const tracklistContainer = document.getElementById('playlist-detail-tracklist');
-        const playBtn = document.getElementById('play-playlist-btn');
+        const imageEl = this._getEl('playlist-detail-image');
+        const collageEl = this._getEl('playlist-detail-collage');
+        const titleEl = this._getEl('playlist-detail-title');
+        const metaEl = this._getEl('playlist-detail-meta');
+        const descEl = this._getEl('playlist-detail-description');
+        const tracklistContainer = this._getEl('playlist-detail-tracklist');
+        const playBtn = this._getEl('play-playlist-btn');
         if (playBtn) playBtn.innerHTML = `${SVG_PLAY}<span>Play</span>`;
-        const dlBtn = document.getElementById('download-playlist-btn');
+        const dlBtn = this._getEl('download-playlist-btn');
         if (dlBtn) dlBtn.innerHTML = `${SVG_DOWNLOAD}<span>Download</span>`;
-        const addPlaylistBtn = document.getElementById('add-playlist-to-playlist-btn');
+        const addPlaylistBtn = this._getEl('add-playlist-to-playlist-btn');
 
         imageEl.src = '';
         imageEl.style.backgroundColor = 'var(--muted)';
@@ -2697,7 +2726,7 @@ export class UIRenderer {
                         }
                         imagesToRender.forEach((cover) => {
                             const img = document.createElement('img');
-                            img.src = this.api.getCoverUrl(cover);
+                        img.src = this._getUiCoverUrl(cover, '320');
                             collageEl.appendChild(img);
                         });
                     } else {
@@ -2723,9 +2752,9 @@ export class UIRenderer {
                 currentSort = savedSort || 'custom';
                 let currentTracks = sortTracks(originalTracks, currentSort);
 
-                const renderTracks = () => {
+                const renderTracks = async () => {
                     // Re-fetch container each time because enableTrackReordering clones it
-                    const container = document.getElementById('playlist-detail-tracklist');
+                    const container = this._getEl('playlist-detail-tracklist');
                     container.innerHTML = `
                         <div class="track-list-header">
                             <span style="width: 40px; text-align: center;">#</span>
@@ -2734,7 +2763,7 @@ export class UIRenderer {
                             <span style="display: flex; justify-content: flex-end; opacity: 0.8;">Menu</span>
                         </div>
                     `;
-                    this.renderListWithTracks(container, currentTracks, true, true);
+                    await this.renderListWithTracks(container, currentTracks, true, true);
 
                     // Add remove buttons and enable reordering ONLY IF OWNED
                     if (ownedPlaylist) {
@@ -2775,7 +2804,7 @@ export class UIRenderer {
                 renderTracks();
 
                 // Update header like button - hide for user playlists
-                const playlistLikeBtn = document.getElementById('like-playlist-btn');
+                const playlistLikeBtn = this._getEl('like-playlist-btn');
                 if (playlistLikeBtn) {
                     playlistLikeBtn.style.display = 'none';
                 }
@@ -2784,7 +2813,7 @@ export class UIRenderer {
                 if (ownedPlaylist) {
                     this.loadRecommendedSongsForPlaylist(tracks);
 
-                    const refreshBtn = document.getElementById('refresh-recommended-songs-btn');
+                    const refreshBtn = this._getEl('refresh-recommended-songs-btn');
                     if (refreshBtn) {
                         refreshBtn.onclick = async () => {
                             const icon = refreshBtn.querySelector('svg');
@@ -2876,7 +2905,7 @@ export class UIRenderer {
                 let currentSort = savedSort || 'custom';
                 let currentTracks = sortTracks(originalTracks, currentSort);
 
-                const renderTracks = () => {
+                const renderTracks = async () => {
                     tracklistContainer.innerHTML = `
                         <div class="track-list-header">
                             <span style="width: 40px; text-align: center;">#</span>
@@ -2885,7 +2914,7 @@ export class UIRenderer {
                             <span style="display: flex; justify-content: flex-end; opacity: 0.8;">Menu</span>
                         </div>
                     `;
-                    this.renderListWithTracks(tracklistContainer, currentTracks, true, true);
+                    await this.renderListWithTracks(tracklistContainer, currentTracks, true, true);
                 };
 
                 const applySort = (sortType) => {
@@ -2903,7 +2932,7 @@ export class UIRenderer {
                 };
 
                 // Update header like button
-                const playlistLikeBtn = document.getElementById('like-playlist-btn');
+                const playlistLikeBtn = this._getEl('like-playlist-btn');
                 if (playlistLikeBtn) {
                     const isLiked = await db.isFavorite('playlist', playlist.uuid);
                     playlistLikeBtn.innerHTML = this.createHeartIcon(isLiked);
@@ -2912,13 +2941,13 @@ export class UIRenderer {
                 }
 
                 // Show/hide Delete button
-                const deleteBtn = document.getElementById('delete-playlist-btn');
+                const deleteBtn = this._getEl('delete-playlist-btn');
                 if (deleteBtn) {
                     deleteBtn.style.display = 'none';
                 }
 
                 // Hide recommended songs section for tidal playlists
-                const recommendedSection = document.getElementById('playlist-section-recommended');
+                const recommendedSection = this._getEl('playlist-section-recommended');
                 if (recommendedSection) {
                     recommendedSection.style.display = 'none';
                 }
@@ -2940,10 +2969,10 @@ export class UIRenderer {
 
     async renderFolderPage(folderId) {
         this.showPage('folder');
-        const imageEl = document.getElementById('folder-detail-image');
-        const titleEl = document.getElementById('folder-detail-title');
-        const metaEl = document.getElementById('folder-detail-meta');
-        const container = document.getElementById('folder-detail-container');
+        const imageEl = this._getEl('folder-detail-image');
+        const titleEl = this._getEl('folder-detail-title');
+        const metaEl = this._getEl('folder-detail-meta');
+        const container = this._getEl('folder-detail-container');
 
         imageEl.src = '';
         imageEl.style.backgroundColor = 'var(--muted)';
@@ -2992,14 +3021,14 @@ export class UIRenderer {
     async renderMixPage(mixId, provider = null) {
         this.showPage('mix');
 
-        const imageEl = document.getElementById('mix-detail-image');
-        const titleEl = document.getElementById('mix-detail-title');
-        const metaEl = document.getElementById('mix-detail-meta');
-        const descEl = document.getElementById('mix-detail-description');
-        const tracklistContainer = document.getElementById('mix-detail-tracklist');
-        const playBtn = document.getElementById('play-mix-btn');
+        const imageEl = this._getEl('mix-detail-image');
+        const titleEl = this._getEl('mix-detail-title');
+        const metaEl = this._getEl('mix-detail-meta');
+        const descEl = this._getEl('mix-detail-description');
+        const tracklistContainer = this._getEl('mix-detail-tracklist');
+        const playBtn = this._getEl('play-mix-btn');
         if (playBtn) playBtn.innerHTML = `${SVG_PLAY}<span>Play</span>`;
-        const dlBtn = document.getElementById('download-mix-btn');
+        const dlBtn = this._getEl('download-mix-btn');
         if (dlBtn) dlBtn.innerHTML = `${SVG_DOWNLOAD}<span>Download</span>`;
 
         // Skeleton loading
@@ -3031,7 +3060,7 @@ export class UIRenderer {
                     const videoCoverUrl = tracks[0].album?.videoCover
                         ? this.api.tidalAPI.getVideoCoverUrl(tracks[0].album.videoCover)
                         : null;
-                    const coverUrl = videoCoverUrl || this.api.getCoverUrl(tracks[0].album.cover);
+                    const coverUrl = videoCoverUrl || this._getUiCoverUrl(tracks[0].album.cover, '1280');
 
                     if (videoCoverUrl) {
                         if (imageEl.tagName === 'IMG') {
@@ -3085,7 +3114,7 @@ export class UIRenderer {
                 </div>
             `;
 
-            this.renderListWithTracks(tracklistContainer, tracks, true, true);
+            await this.renderListWithTracks(tracklistContainer, tracks, true, true);
 
             // Set play button action
             playBtn.onclick = () => {
@@ -3096,7 +3125,7 @@ export class UIRenderer {
             recentActivityManager.addMix(mix);
 
             // Update header like button
-            const mixLikeBtn = document.getElementById('like-mix-btn');
+            const mixLikeBtn = this._getEl('like-mix-btn');
             if (mixLikeBtn) {
                 mixLikeBtn.style.display = 'flex';
                 const isLiked = await db.isFavorite('mix', mix.id);
@@ -3114,18 +3143,18 @@ export class UIRenderer {
     async renderArtistPage(artistId, provider = null) {
         this.showPage('artist');
 
-        const imageEl = document.getElementById('artist-detail-image');
-        const nameEl = document.getElementById('artist-detail-name');
-        const metaEl = document.getElementById('artist-detail-meta');
-        const socialsEl = document.getElementById('artist-detail-socials');
-        const bioEl = document.getElementById('artist-detail-bio');
-        const tracksContainer = document.getElementById('artist-detail-tracks');
-        const albumsContainer = document.getElementById('artist-detail-albums');
-        const epsContainer = document.getElementById('artist-detail-eps');
-        const epsSection = document.getElementById('artist-section-eps');
-        const similarContainer = document.getElementById('artist-detail-similar');
-        const similarSection = document.getElementById('artist-section-similar');
-        const dlBtn = document.getElementById('download-discography-btn');
+        const imageEl = this._getEl('artist-detail-image');
+        const nameEl = this._getEl('artist-detail-name');
+        const metaEl = this._getEl('artist-detail-meta');
+        const socialsEl = this._getEl('artist-detail-socials');
+        const bioEl = this._getEl('artist-detail-bio');
+        const tracksContainer = this._getEl('artist-detail-tracks');
+        const albumsContainer = this._getEl('artist-detail-albums');
+        const epsContainer = this._getEl('artist-detail-eps');
+        const epsSection = this._getEl('artist-section-eps');
+        const similarContainer = this._getEl('artist-detail-similar');
+        const similarSection = this._getEl('artist-section-similar');
+        const dlBtn = this._getEl('download-discography-btn');
         if (dlBtn) dlBtn.innerHTML = `${SVG_DOWNLOAD}<span>Download Discography</span>`;
 
         imageEl.src = '';
@@ -3142,7 +3171,7 @@ export class UIRenderer {
         albumsContainer.innerHTML = this.createSkeletonCards(6, false);
         if (epsContainer) epsContainer.innerHTML = this.createSkeletonCards(6, false);
         if (epsSection) epsSection.style.display = 'none';
-        const loadUnreleasedSection = document.getElementById('artist-section-load-unreleased');
+        const loadUnreleasedSection = this._getEl('artist-section-load-unreleased');
         if (loadUnreleasedSection) loadUnreleasedSection.style.display = 'none';
         if (similarContainer) similarContainer.innerHTML = this.createSkeletonCards(6, true);
         if (similarSection) similarSection.style.display = 'block';
@@ -3308,7 +3337,7 @@ export class UIRenderer {
             }
 
             // Handle Artist Mix Button
-            const mixBtn = document.getElementById('artist-mix-btn');
+            const mixBtn = this._getEl('artist-mix-btn');
             if (mixBtn) {
                 if (artist.mixes && artist.mixes.ARTIST_MIX) {
                     mixBtn.style.display = 'flex';
@@ -3378,10 +3407,10 @@ export class UIRenderer {
                 }
             });
 
-            this.renderListWithTracks(tracksContainer, artist.tracks, true);
+            await this.renderListWithTracks(tracksContainer, artist.tracks, true);
 
             // Update header like button
-            const artistLikeBtn = document.getElementById('like-artist-btn');
+            const artistLikeBtn = this._getEl('like-artist-btn');
             if (artistLikeBtn) {
                 const isLiked = await db.isFavorite('artist', artist.id);
                 artistLikeBtn.innerHTML = this.createHeartIcon(isLiked);
@@ -3389,41 +3418,49 @@ export class UIRenderer {
             }
 
             // Render Albums
-            albumsContainer.innerHTML = artist.albums.length
-                ? artist.albums.map((album) => this.createAlbumCardHTML(album)).join('')
-                : createPlaceholder('No albums found.');
+            if (artist.albums.length) {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = artist.albums.map((album) => this.createAlbumCardHTML(album)).join('');
+
+                const fragment = document.createDocumentFragment();
+                Array.from(tempDiv.children).forEach((el, i) => {
+                    const album = artist.albums[i];
+                    trackDataStore.set(el, album);
+                    this.updateLikeState(el, 'album', album.id);
+                    fragment.appendChild(el);
+                });
+                albumsContainer.innerHTML = '';
+                albumsContainer.appendChild(fragment);
+            } else {
+                albumsContainer.innerHTML = createPlaceholder('No albums found.');
+            }
 
             // Render EPs and Singles
             if (epsContainer && epsSection) {
                 if (artist.eps && artist.eps.length > 0) {
-                    epsContainer.innerHTML = artist.eps.map((album) => this.createAlbumCardHTML(album)).join('');
-                    epsSection.style.display = 'block';
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = artist.eps.map((album) => this.createAlbumCardHTML(album)).join('');
 
-                    artist.eps.forEach((album) => {
-                        const el = epsContainer.querySelector(`[data-album-id="${album.id}"]`);
-                        if (el) {
-                            trackDataStore.set(el, album);
-                            this.updateLikeState(el, 'album', album.id);
-                        }
+                    const fragment = document.createDocumentFragment();
+                    Array.from(tempDiv.children).forEach((el, i) => {
+                        const album = artist.eps[i];
+                        trackDataStore.set(el, album);
+                        this.updateLikeState(el, 'album', album.id);
+                        fragment.appendChild(el);
                     });
+                    epsContainer.innerHTML = '';
+                    epsContainer.appendChild(fragment);
+                    epsSection.style.display = 'block';
                 } else {
                     epsSection.style.display = 'none';
                 }
             }
 
-            artist.albums.forEach((album) => {
-                const el = albumsContainer.querySelector(`[data-album-id="${album.id}"]`);
-                if (el) {
-                    trackDataStore.set(el, album);
-                    this.updateLikeState(el, 'album', album.id);
-                }
-            });
-
             // Check for unreleased projects
-            const unreleasedSection = document.getElementById('artist-section-unreleased');
-            const unreleasedContainer = document.getElementById('artist-detail-unreleased');
-            const loadUnreleasedBtn = document.getElementById('load-unreleased-btn');
-            const loadUnreleasedSection = document.getElementById('artist-section-load-unreleased');
+            const unreleasedSection = this._getEl('artist-section-unreleased');
+            const unreleasedContainer = this._getEl('artist-detail-unreleased');
+            const loadUnreleasedBtn = this._getEl('load-unreleased-btn');
+            const loadUnreleasedSection = this._getEl('artist-section-load-unreleased');
             if (unreleasedSection && unreleasedContainer && loadUnreleasedBtn && loadUnreleasedSection) {
                 // Initially hide the unreleased section
                 unreleasedSection.style.display = 'none';
@@ -3559,8 +3596,8 @@ export class UIRenderer {
 
     async renderRecentPage() {
         this.showPage('recent');
-        const container = document.getElementById('recent-tracks-container');
-        const clearBtn = document.getElementById('clear-history-btn');
+        const container = this._getEl('recent-tracks-container');
+        const clearBtn = this._getEl('clear-history-btn');
         container.innerHTML = this.createSkeletonTracks(10, true);
 
         try {
@@ -3616,7 +3653,7 @@ export class UIRenderer {
 
                 // Use a temporary container to render tracks and then move them
                 const tempContainer = document.createElement('div');
-                this.renderListWithTracks(tempContainer, tracks, true);
+                await this.renderListWithTracks(tempContainer, tracks, true);
 
                 // Move children to main container
                 while (tempContainer.firstChild) {
@@ -3648,30 +3685,32 @@ export class UIRenderer {
 
     async renderUnreleasedPage() {
         this.showPage('unreleased');
-        const container = document.getElementById('unreleased-content');
+        const container = this._getEl('unreleased-content');
         await renderUnreleasedTrackerPage(container);
     }
 
     async renderTrackerArtistPage(sheetId) {
         this.showPage('tracker-artist');
-        const container = document.getElementById('tracker-artist-projects-container');
+        const container = this._getEl('tracker-artist-projects-container');
         await renderTrackerArtistContent(sheetId, container);
     }
 
     async renderTrackerProjectPage(sheetId, projectName) {
         this.showPage('album'); // Use album page template
-        const container = document.getElementById('album-detail-tracklist');
+        const container = this._getEl('album-detail-tracklist');
         await renderTrackerProjectContent(sheetId, projectName, container, this);
     }
 
     async renderTrackerTrackPage(trackId) {
         this.showPage('album'); // Use album page template
-        const container = document.getElementById('album-detail-tracklist');
+        const container = this._getEl('album-detail-tracklist');
         await renderTrackerTrackContent(trackId, container, this);
     }
 
     updatePlaylistHeaderActions(playlist, isOwned, tracks, showShare = false, onSort = null, getCurrentSort = null) {
-        const actionsDiv = document.getElementById('page-playlist').querySelector('.detail-header-actions');
+        const playlistPage = this._getEl('page-playlist');
+        const actionsDiv = playlistPage?.querySelector('.detail-header-actions');
+        if (!actionsDiv) return;
 
         // Cleanup existing dynamic buttons
         [
@@ -3710,7 +3749,8 @@ export class UIRenderer {
 
             sortBtn.onclick = (e) => {
                 e.stopPropagation();
-                const menu = document.getElementById('sort-menu');
+                const menu = this._getEl('sort-menu');
+                if (!menu) return;
 
                 // Show "Date Added" options only if tracks have addedAt
                 const hasAddedDate = tracks.some((t) => t.addedAt);
@@ -3962,7 +4002,8 @@ export class UIRenderer {
     }
 
     renderApiSettings() {
-        const container = document.getElementById('api-instance-list');
+        const container = this._getEl('api-instance-list');
+        if (!container) return;
         Promise.all([this.api.settings.getInstances('api'), this.api.settings.getInstances('streaming')]).then(
             ([apiInstances, streamingInstances]) => {
                 const renderGroup = (instances, type) => {
@@ -4015,7 +4056,7 @@ export class UIRenderer {
                 container.innerHTML = renderGroup(apiInstances, 'api') + renderGroup(streamingInstances, 'streaming');
 
                 const stats = this.api.getCacheStats();
-                const cacheInfo = document.getElementById('cache-info');
+                const cacheInfo = this._getEl('cache-info');
                 if (cacheInfo) {
                     cacheInfo.textContent = `Cache: ${stats.memoryEntries}/${stats.maxSize} entries`;
                 }
@@ -4027,23 +4068,23 @@ export class UIRenderer {
         this.showPage('track');
 
         document.body.classList.add('sidebar-collapsed');
-        const toggleBtn = document.getElementById('sidebar-toggle');
+        const toggleBtn = this._getEl('sidebar-toggle');
         if (toggleBtn) {
             toggleBtn.innerHTML =
                 '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
         }
 
-        const imageEl = document.getElementById('track-detail-image');
-        const titleEl = document.getElementById('track-detail-title');
-        const artistEl = document.getElementById('track-detail-artist');
-        const albumEl = document.getElementById('track-detail-album');
-        const yearEl = document.getElementById('track-detail-year');
-        const albumSection = document.getElementById('track-album-section');
-        const albumTracksContainer = document.getElementById('track-detail-album-tracks');
-        const similarSection = document.getElementById('track-similar-section');
+        const imageEl = this._getEl('track-detail-image');
+        const titleEl = this._getEl('track-detail-title');
+        const artistEl = this._getEl('track-detail-artist');
+        const albumEl = this._getEl('track-detail-album');
+        const yearEl = this._getEl('track-detail-year');
+        const albumSection = this._getEl('track-album-section');
+        const albumTracksContainer = this._getEl('track-detail-album-tracks');
+        const similarSection = this._getEl('track-similar-section');
 
-        const playBtn = document.getElementById('play-track-btn');
-        const likeBtn = document.getElementById('like-track-btn');
+        const playBtn = this._getEl('play-track-btn');
+        const likeBtn = this._getEl('like-track-btn');
 
         imageEl.src = '';
         imageEl.style.backgroundColor = 'var(--muted)';
@@ -4074,7 +4115,7 @@ export class UIRenderer {
             const videoCoverUrl = track.album?.videoCover
                 ? this.api.tidalAPI.getVideoCoverUrl(track.album.videoCover)
                 : null;
-            const coverUrl = videoCoverUrl || this.api.getCoverUrl(track.album?.cover);
+            const coverUrl = videoCoverUrl || this._getUiCoverUrl(track.album?.cover, '1280');
 
             if (videoCoverUrl) {
                 if (imageEl.tagName === 'IMG') {
@@ -4139,7 +4180,7 @@ export class UIRenderer {
                 const { tracks } = await this.api.getAlbum(track.album.id);
                 if (tracks && tracks.length > 0) {
                     albumSection.style.display = 'block';
-                    this.renderListWithTracks(albumTracksContainer, tracks, false);
+                    await this.renderListWithTracks(albumTracksContainer, tracks, false);
                 }
             }
 

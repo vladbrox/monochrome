@@ -296,6 +296,9 @@ export class Player {
             this.playNext();
         });
 
+        // Registering 'nexttrack' and 'previoustrack' is usually enough to replace 10s skip on iOS.
+        // We ensure they are always registered when metadata is updated.
+
         navigator.mediaSession.setActionHandler('seekbackward', (details) => {
             const skipTime = details.seekOffset || 10;
             this.seekBackward(skipTime);
@@ -318,6 +321,31 @@ export class Player {
             this.audio.currentTime = 0;
             this.updateMediaSessionPlaybackState();
         });
+
+        try {
+            navigator.mediaSession.setActionHandler('toggletracklike', async () => {
+                if (this.currentTrack) {
+                    // We need to import events.js or use a callback to handle the like toggle
+                    // Since Player doesn't have direct access to handleTrackAction easily without circular imports,
+                    // we'll dispatch a custom event or use the db directly.
+                    const { db } = await import('./db.js');
+                    const { syncManager } = await import('./accounts/pocketbase.js');
+                    const added = await db.toggleFavorite('track', this.currentTrack);
+                    syncManager.syncLibraryItem('track', this.currentTrack, added);
+
+                    // Update UI if possible
+                    window.dispatchEvent(
+                        new CustomEvent('track-liked-external', {
+                            detail: { track: this.currentTrack, added },
+                        })
+                    );
+
+                    this.updateMediaSession(this.currentTrack);
+                }
+            });
+        } catch {
+            // toggletracklike is not supported in all browsers
+        }
     }
 
     setQuality(quality) {
@@ -930,7 +958,7 @@ export class Player {
         navigator.mediaSession.metadata = null;
 
         const artwork = [];
-        const sizes = ['320'];
+        const sizes = ['320', '640', '1280'];
         const coverId = track.album?.cover;
         const trackTitle = getTrackTitle(track);
 

@@ -12,6 +12,7 @@ import {
     smoothScrollingSettings,
     downloadQualitySettings,
     coverArtSizeSettings,
+    uiCoverArtSettings,
     qualityBadgeSettings,
     trackDateSettings,
     visualizerSettings,
@@ -33,6 +34,7 @@ import {
     musicProviderSettings,
     analyticsSettings,
     modalSettings,
+    borderRadiusSettings,
 } from './storage.js';
 import { audioContextManager, EQ_PRESETS } from './audio-context.js';
 import { getButterchurnPresets } from './visualizers/butterchurn.js';
@@ -812,6 +814,14 @@ export function initializeSettings(scrobbler, player, api, ui) {
 
         coverArtSizeSetting.addEventListener('change', (e) => {
             coverArtSizeSettings.setSize(e.target.value);
+        });
+    }
+
+    const hqUiCoversToggle = document.getElementById('hq-ui-covers-toggle');
+    if (hqUiCoversToggle) {
+        hqUiCoversToggle.checked = uiCoverArtSettings.isEnabled();
+        hqUiCoversToggle.addEventListener('change', (e) => {
+            uiCoverArtSettings.setEnabled(e.target.checked);
         });
     }
 
@@ -2882,6 +2892,30 @@ export function initializeSettings(scrobbler, player, api, ui) {
 
     // Font Settings
     initializeFontSettings();
+
+    // Border Radius Settings
+    const borderRadiusSlider = document.getElementById('border-radius-slider');
+    const borderRadiusInput = document.getElementById('border-radius-input');
+
+    if (borderRadiusSlider && borderRadiusInput) {
+        const radius = borderRadiusSettings.getRadius();
+        borderRadiusSlider.value = radius;
+        borderRadiusInput.value = radius;
+
+        borderRadiusSlider.addEventListener('input', (e) => {
+            const newRadius = parseInt(e.target.value, 10);
+            borderRadiusInput.value = newRadius;
+            borderRadiusSettings.setRadius(newRadius);
+        });
+
+        borderRadiusInput.addEventListener('change', (e) => {
+            let newRadius = parseInt(e.target.value, 10);
+            newRadius = Math.max(0, Math.min(50, newRadius || 24));
+            borderRadiusSlider.value = newRadius;
+            borderRadiusInput.value = newRadius;
+            borderRadiusSettings.setRadius(newRadius);
+        });
+    }
 
     // Settings Search functionality
     setupSettingsSearch();

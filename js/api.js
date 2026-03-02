@@ -207,18 +207,22 @@ export class LosslessAPI {
 
         const albumDateMap = new Map();
 
-        // Chunk requests to avoid spamming
+        // Use a controlled chunk size for parallelism while respecting rate limits
         const chunkSize = 5;
         for (let i = 0; i < limitedIds.length; i += chunkSize) {
             const chunk = limitedIds.slice(i, i + chunkSize);
             const results = await Promise.allSettled(chunk.map((id) => this.getAlbum(id)));
 
-            for (let j = 0; j < results.length; j++) {
-                const result = results[j];
+            results.forEach((result, j) => {
                 const id = chunk[j];
                 if (result.status === 'fulfilled' && result.value.album?.releaseDate) {
                     albumDateMap.set(id, result.value.album.releaseDate);
                 }
+            });
+
+            // Add a small delay between chunks if there are more to process
+            if (i + chunkSize < limitedIds.length) {
+                await delay(100);
             }
         }
 
@@ -1266,6 +1270,9 @@ export class LosslessAPI {
         }
 
         const formattedId = id.replace(/-/g, '/');
+        if (size === 'original') {
+            return `https://resources.tidal.com/images/${formattedId}/origin.jpg`;
+        }
         return `https://resources.tidal.com/images/${formattedId}/${size}x${size}.jpg`;
     }
 

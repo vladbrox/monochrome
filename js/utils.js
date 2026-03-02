@@ -428,7 +428,9 @@ export async function getCoverBlob(api, coverId) {
     let fetchSize = 1280;
 
     const bestSize = supportedSizes.find((s) => s >= requestedSize);
-    if (bestSize) {
+    if (sizeStr === 'original') {
+        fetchSize = 'original';
+    } else if (bestSize) {
         fetchSize = bestSize;
     }
 

@@ -50,7 +50,8 @@
     --radius-xl: 16px;
     --radius-2xl: 24px;
     --radius-full: 9999px;
-    --radius: var(--radius-md);
+    --radius-custom: 24px;
+    --radius: var(--radius-custom);
     --player-bar-height-desktop: 90px;
     --player-bar-height-mobile: 130px;
     --sidebar-width: 240px;
@@ -6086,8 +6087,9 @@ img[src=''] {
 }
 
 @media (hover: none) {
-    .track-menu-btn {
-        opacity: 1;
+    .track-menu-btn,
+    .card-menu-btn {
+        opacity: 1 !important;
     }
 
     .track-actions-inline {
