@@ -64,6 +64,10 @@ export class MusicDatabase {
                     const store = db.createObjectStore('pinned_items', { keyPath: 'id' });
                     store.createIndex('pinnedAt', 'pinnedAt', { unique: false });
                 }
+                if (!db.objectStoreNames.contains('lyrics_cache')) {
+                    const store = db.createObjectStore('lyrics_cache', { keyPath: 'trackId' });
+                    store.createIndex('cachedAt', 'cachedAt', { unique: false });
+                }
             };
         });
     }

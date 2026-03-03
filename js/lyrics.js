@@ -1,6 +1,7 @@
 //js/lyrics.js
 import { getTrackTitle, getTrackArtists, buildTrackFilename, SVG_CLOSE } from './utils.js';
 import { sidePanelManager } from './side-panel.js';
+import { db } from './db.js';
 
 const SVG_GENIUS_ACTIVE = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 24c6.627 0 12-5.373 12-12S18.627 0 12 0 0 5.373 0 12s5.373 12 12 12z" fill="#ffff64"/><path d="M6.3 6.3h11.4v11.4H6.3z" fill="#000"/></svg>`;
 
@@ -395,6 +396,17 @@ export class LyricsManager {
                 return this.lyricsCache.get(trackId);
             }
 
+            // Check IndexedDB cache
+            try {
+                const cached = await db.performTransaction('lyrics_cache', 'readonly', (store) => store.get(trackId));
+                if (cached && cached.lyricsData) {
+                    this.lyricsCache.set(trackId, cached.lyricsData);
+                    return cached.lyricsData;
+                }
+            } catch (e) {
+                console.warn('Lyrics DB cache read failed:', e);
+            }
+
             try {
                 const artist = Array.isArray(track.artists)
                     ? track.artists.map((a) => a.name || a).join(', ')
@@ -428,6 +440,20 @@ export class LyricsManager {
                         };
 
                         this.lyricsCache.set(trackId, lyricsData);
+
+                        // Save to IndexedDB
+                        try {
+                            await db.performTransaction('lyrics_cache', 'readwrite', (store) =>
+                                store.put({
+                                    trackId,
+                                    lyricsData,
+                                    cachedAt: Date.now(),
+                                })
+                            );
+                        } catch (e) {
+                            console.warn('Lyrics DB cache write failed:', e);
+                        }
+
                         return lyricsData;
                     }
                 }

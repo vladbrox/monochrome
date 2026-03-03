@@ -97,8 +97,12 @@ export function getVibrantColorFromImage(imgElement) {
     const pixels = imageData.data;
     const candidates = [];
 
+    // Optimization: Sample pixels instead of processing every single one.
+    // 4x speedup with negligible loss in accuracy for 64x64 thumbnail.
+    const step = 4; // Process every 4th pixel (every 16th byte)
+
     // Iterate through pixels
-    for (let i = 0; i < pixels.length; i += 4) {
+    for (let i = 0; i < pixels.length; i += 4 * step) {
         const r = pixels[i];
         const g = pixels[i + 1];
         const b = pixels[i + 2];
@@ -117,7 +121,7 @@ export function getVibrantColorFromImage(imgElement) {
 
     // If no candidates found with strict criteria, relax criteria
     if (candidates.length === 0) {
-        for (let i = 0; i < pixels.length; i += 4) {
+        for (let i = 0; i < pixels.length; i += 4 * step) {
             const r = pixels[i];
             const g = pixels[i + 1];
             const b = pixels[i + 2];

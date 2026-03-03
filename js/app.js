@@ -8,6 +8,7 @@ import {
     sidebarSettings,
     pwaUpdateSettings,
     modalSettings,
+    borderRadiusSettings,
 } from './storage.js';
 import { UIRenderer } from './ui.js';
 import { Player } from './player.js';
@@ -406,6 +407,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const currentTheme = themeManager.getTheme();
     themeManager.setTheme(currentTheme);
+    borderRadiusSettings.applyRadius();
 
     // Restore sidebar state
     sidebarSettings.restoreState();

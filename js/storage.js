@@ -2482,3 +2482,44 @@ export const contentBlockingSettings = {
         localStorage.removeItem(this.BLOCKED_ALBUMS_KEY);
     },
 };
+
+export const borderRadiusSettings = {
+    STORAGE_KEY: 'monochrome-border-radius',
+    DEFAULT_RADIUS: 24,
+
+    getRadius() {
+        try {
+            const val = localStorage.getItem(this.STORAGE_KEY);
+            return val === null ? this.DEFAULT_RADIUS : parseInt(val, 10);
+        } catch {
+            return this.DEFAULT_RADIUS;
+        }
+    },
+
+    setRadius(value) {
+        const radius = Math.max(0, Math.min(50, parseInt(value, 10) || this.DEFAULT_RADIUS));
+        localStorage.setItem(this.STORAGE_KEY, radius.toString());
+        this.applyRadius();
+    },
+
+    applyRadius() {
+        const radius = this.getRadius();
+        document.documentElement.style.setProperty('--radius-custom', `${radius}px`);
+    },
+};
+
+export const uiCoverArtSettings = {
+    STORAGE_KEY: 'hq-ui-covers-enabled',
+
+    isEnabled() {
+        try {
+            return localStorage.getItem(this.STORAGE_KEY) === 'true';
+        } catch {
+            return false;
+        }
+    },
+
+    setEnabled(enabled) {
+        localStorage.setItem(this.STORAGE_KEY, enabled ? 'true' : 'false');
+    },
+};

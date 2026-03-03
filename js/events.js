@@ -1359,6 +1359,10 @@ export async function handleTrackAction(
 
         if (item.isTracker && item.trackerInfo && item.trackerInfo.sourceUrl) {
             url = item.trackerInfo.sourceUrl;
+        } else if (item.id && !item.isLocal) {
+            // For Tidal tracks, use tidal.com link
+            const cleanId = String(item.id).replace('t:', '');
+            url = `https://tidal.com/track/${cleanId}`;
         } else if (item.remoteUrl) {
             url = item.remoteUrl;
         }
@@ -1446,11 +1450,11 @@ async function updateContextMenuLikeState(contextMenu, contextTrack) {
         trackMixItem.style.display = hasMix ? 'block' : 'none';
     }
 
-    // Show/hide "Open Original URL" only for unreleased/tracker tracks
+    // Show "Open Original URL" for all non-local tracks
     const openOriginalUrlItem = contextMenu.querySelector('li[data-action="open-original-url"]');
     if (openOriginalUrlItem) {
-        const isUnreleased = contextTrack.isTracker || (contextTrack.trackerInfo && contextTrack.trackerInfo.sourceUrl);
-        openOriginalUrlItem.style.display = isUnreleased ? 'block' : 'none';
+        const isLocal = contextTrack.isLocal;
+        openOriginalUrlItem.style.display = !isLocal ? 'block' : 'none';
     }
 
     // Update block/unblock labels
@@ -1951,6 +1955,52 @@ export function initializeTrackInteractions(player, api, mainContent, contextMen
             }
         });
     }
+
+    // Sync UI when track is liked from system media controls (lock screen)
+    window.addEventListener('track-liked-external', (e) => {
+        const { track, added } = e.detail;
+        if (!track) return;
+
+        // Reuse the logic for updating buttons on the page
+        const id = track.id;
+        const selector = `[data-track-id="${id}"] .like-btn`;
+        const headerBtn = document.getElementById(`like-track-btn`);
+        const nowPlayingLikeBtn = document.getElementById('now-playing-like-btn');
+        const fsLikeBtn = document.getElementById('fs-like-btn');
+
+        const elementsToUpdate = [...document.querySelectorAll(selector)];
+        if (headerBtn) elementsToUpdate.push(headerBtn);
+        if (nowPlayingLikeBtn && player?.currentTrack?.id === track.id) {
+            elementsToUpdate.push(nowPlayingLikeBtn);
+        }
+        if (fsLikeBtn && player?.currentTrack?.id === track.id) {
+            elementsToUpdate.push(fsLikeBtn);
+        }
+
+        elementsToUpdate.forEach((btn) => {
+            const heartIcon = btn.querySelector('svg');
+            if (heartIcon) {
+                heartIcon.classList.toggle('filled', added);
+                if (heartIcon.hasAttribute('fill')) {
+                    heartIcon.setAttribute('fill', added ? 'currentColor' : 'none');
+                }
+            }
+            btn.classList.toggle('active', added);
+            btn.title = added ? 'Remove from Favorites' : 'Add to Favorites';
+        });
+
+        if (added) trackLikeTrack(track);
+        else trackUnlikeTrack(track);
+
+        if (added && scrobbler) {
+            if (lastFMStorage.isEnabled() && lastFMStorage.shouldLoveOnLike()) {
+                scrobbler.loveTrack(track);
+            }
+            if (libreFmSettings.isEnabled() && libreFmSettings.shouldLoveOnLike()) {
+                scrobbler.loveTrack(track);
+            }
+        }
+    });
 
     // Mobile add playlist button functionality
     const mobileAddPlaylistBtn = document.getElementById('mobile-add-playlist-btn');
